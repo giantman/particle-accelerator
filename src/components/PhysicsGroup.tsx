@@ -12,46 +12,62 @@ interface PhysicsGroupProps {
 export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
   return (
     <>
-      <RangeRow
-        id="radius"
-        label="Blast radius"
-        min={0.04}
-        max={0.3}
-        step={0.01}
-        value={params.radius}
-        format={fmt.radius}
-        onChange={(v) => updateParam("radius", v)}
+      <CheckboxField
+        id="blastEnabled"
+        label="Blast"
+        checked={params.blastEnabled}
+        onCheckedChange={(v) => updateParam("blastEnabled", v)}
       />
-      <RangeRow
-        id="strength"
-        label="Blast power"
-        min={0}
-        max={3}
-        step={0.1}
-        value={params.strength}
-        format={fmt.strength}
-        onChange={(v) => updateParam("strength", v)}
-      />
-      <RangeRow
-        id="falloff"
-        label="Falloff"
-        min={0}
-        max={1}
-        step={0.05}
-        value={params.falloff}
-        format={fmt.falloff}
-        onChange={(v) => updateParam("falloff", v)}
-      />
-      <RangeRow
-        id="swirl"
-        label="Swirl"
-        min={0}
-        max={3}
-        step={0.1}
-        value={params.swirl}
-        format={fmt.swirl}
-        onChange={(v) => updateParam("swirl", v)}
-      />
+      {params.blastEnabled && (
+        <>
+          <RangeRow
+            id="radius"
+            label="Blast radius"
+            min={0.04}
+            max={0.3}
+            step={0.01}
+            value={params.radius}
+            format={fmt.radius}
+            onChange={(v) => updateParam("radius", v)}
+          />
+          <RangeRow
+            id="strength"
+            label="Blast power"
+            min={0}
+            max={3}
+            step={0.1}
+            value={params.strength}
+            format={fmt.strength}
+            onChange={(v) => updateParam("strength", v)}
+          />
+          <RangeRow
+            id="falloff"
+            label="Falloff"
+            min={0}
+            max={1}
+            step={0.05}
+            value={params.falloff}
+            format={fmt.falloff}
+            onChange={(v) => updateParam("falloff", v)}
+          />
+          <RangeRow
+            id="swirl"
+            label="Swirl"
+            min={0}
+            max={3}
+            step={0.1}
+            value={params.swirl}
+            format={fmt.swirl}
+            onChange={(v) => updateParam("swirl", v)}
+          />
+          <CheckboxField
+            id="attract"
+            label="Attract (magnet)"
+            checked={params.attract}
+            onCheckedChange={(v) => updateParam("attract", v)}
+          />
+        </>
+      )}
       <RangeRow
         id="spring"
         label="Return speed"
@@ -139,12 +155,6 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
           />
         </>
       )}
-      <CheckboxField
-        id="attract"
-        label="Attract (magnet)"
-        checked={params.attract}
-        onCheckedChange={(v) => updateParam("attract", v)}
-      />
       <RangeRow
         id="turbulence"
         label="Turbulence"

@@ -566,7 +566,7 @@ export class ScatterPressEngine {
   }
 
   private burst(bx: number, by: number) {
-    if (this.reduced || !this.count) return;
+    if (this.reduced || !this.count || !this.params.blastEnabled) return;
     const p = this.params;
     const L = Math.max(80, this.W * p.radius * 2.2);
     const A = 16 * p.strength * (this.W / 640);
@@ -591,7 +591,7 @@ export class ScatterPressEngine {
       DAMP = Math.min(0.97, 0.86 + 0.03 * (1 - Math.min(p.spring, 1)));
     const R = Math.max(40, this.W * p.radius),
       R2 = R * R;
-    const kick = this.reduced ? 0 : this.W * 0.006 * p.strength;
+    const kick = this.reduced || !p.blastEnabled ? 0 : this.W * 0.006 * p.strength;
     const STAG = p.stagger * 1000;
     const ti = now - this.t0;
     const t = now / 1000;

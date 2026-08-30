@@ -12,6 +12,7 @@ export interface ScatterParams {
   paper: string;
   depthRamp: boolean;
   rampColors: string[];
+  blastEnabled: boolean;
   radius: number;
   strength: number;
   falloff: number;
@@ -46,6 +47,7 @@ export const DEFAULTS: ScatterParams = {
   paper: "#F8F8FC",
   depthRamp: false,
   rampColors: ["#1F2CB4", "#3143EB", "#7A86F0"],
+  blastEnabled: true,
   radius: 0.09,
   strength: 1,
   falloff: 0.5,
@@ -147,6 +149,7 @@ export const fmt: Record<
     | "charset"
     | "maskEnabled"
     | "mask"
+    | "blastEnabled"
     | "orbit"
     | "orbitPath"
     | "attract"
