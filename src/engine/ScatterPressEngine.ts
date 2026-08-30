@@ -3,11 +3,15 @@ import { DEFAULTS, REBUILD_KEYS, saveParams, type ScatterParams } from "./params
 export interface Plate {
   canvas: HTMLCanvasElement;
   thumb: string;
+  // A capped, re-encoded copy of the plate suitable for persisting to
+  // localStorage (unlike `canvas`/`thumb`, which are full working
+  // resolution and a tiny tray icon respectively).
+  source: string;
 }
 
 export interface ScatterPressCallbacks {
   onStats?: (text: string) => void;
-  onPlates?: (thumbs: string[], current: number) => void;
+  onPlates?: (thumbs: string[], current: number, sources: string[]) => void;
 }
 
 const REBUILD_KEY_SET = new Set<string>(REBUILD_KEYS);
@@ -329,7 +333,18 @@ export class ScatterPressEngine {
     t.width = Math.max(2, Math.round(c.width * ts));
     t.height = Math.max(2, Math.round(c.height * ts));
     t.getContext("2d")!.drawImage(c, 0, 0, t.width, t.height);
-    this.plates.push({ canvas: c, thumb: t.toDataURL("image/jpeg", 0.72) });
+    // Re-encoded, size-capped copy — small enough that a handful of plates
+    // comfortably fit in localStorage, so uploads survive a page reload.
+    const s = document.createElement("canvas");
+    const ss = Math.min(1, 640 / Math.max(c.width, c.height));
+    s.width = Math.max(2, Math.round(c.width * ss));
+    s.height = Math.max(2, Math.round(c.height * ss));
+    s.getContext("2d")!.drawImage(c, 0, 0, s.width, s.height);
+    this.plates.push({
+      canvas: c,
+      thumb: t.toDataURL("image/jpeg", 0.72),
+      source: s.toDataURL("image/jpeg", 0.82),
+    });
     this.selectPlate(this.plates.length - 1);
     return this.current;
   }
@@ -346,7 +361,8 @@ export class ScatterPressEngine {
   private emitPlates() {
     this.callbacks.onPlates?.(
       this.plates.map((p) => p.thumb),
-      this.current
+      this.current,
+      this.plates.map((p) => p.source)
     );
   }
 

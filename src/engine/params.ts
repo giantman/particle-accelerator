@@ -93,6 +93,39 @@ export function saveParams(p: ScatterParams): void {
   }
 }
 
+// Uploaded plates otherwise live only in memory, so a reload silently
+// discards them and falls back to the default image. Persist the capped
+// "source" copy each plate carries (small enough that a handful comfortably
+// fit) so an upload survives a refresh.
+const PLATES_KEY = "scatter-press-v1-plates";
+
+export interface StoredPlates {
+  sources: string[];
+  current: number;
+}
+
+export function loadPlates(): StoredPlates | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PLATES_KEY) || "null");
+    if (saved && Array.isArray(saved.sources) && saved.sources.length) return saved;
+  } catch {
+    /* ignore corrupt storage */
+  }
+  return null;
+}
+
+export function savePlates(sources: string[], current: number): void {
+  try {
+    if (!sources.length) {
+      localStorage.removeItem(PLATES_KEY);
+      return;
+    }
+    localStorage.setItem(PLATES_KEY, JSON.stringify({ sources, current }));
+  } catch {
+    /* storage unavailable or quota exceeded — non-fatal, just won't persist */
+  }
+}
+
 // Which param keys require the particle geometry (coverage grid) to be
 // resampled from the source image, vs. ones that only affect live uniforms.
 export const REBUILD_KEYS: (keyof ScatterParams)[] = [

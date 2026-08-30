@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScatterPressEngine } from "../engine/ScatterPressEngine";
-import { DEFAULTS, loadParams, saveParams, type ScatterParams } from "../engine/params";
+import { DEFAULTS, loadParams, loadPlates, savePlates, saveParams, type ScatterParams } from "../engine/params";
 import { DEFAULT_IMG } from "../engine/defaultImage";
 
 export function useScatterPress() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ScatterPressEngine | null>(null);
+  // Only persist plates once there's something worth restoring — an upload,
+  // or plates we already restored from a previous session — so a fresh
+  // visit that never touches the default image doesn't write it to storage.
+  const persistPlatesRef = useRef(false);
 
   const [params, setParams] = useState<ScatterParams>(() => loadParams());
   const [plates, setPlates] = useState<string[]>([]);
@@ -20,9 +24,10 @@ export function useScatterPress() {
     if (!canvasRef.current) return;
     const engine = new ScatterPressEngine(canvasRef.current, {
       onStats: setStats,
-      onPlates: (thumbs, i) => {
+      onPlates: (thumbs, i, sources) => {
         setPlates(thumbs);
         setCurrent(i);
+        if (persistPlatesRef.current) savePlates(sources, i);
       },
     });
     engineRef.current = engine;
@@ -32,9 +37,29 @@ export function useScatterPress() {
       engine.setParams(params);
       if (frameRef.current) engine.observeResize(frameRef.current);
 
-      const img = new Image();
-      img.onload = () => engine.addPlate(img);
-      img.src = DEFAULT_IMG;
+      const stored = loadPlates();
+      if (stored) {
+        persistPlatesRef.current = true;
+        (async () => {
+          for (const src of stored.sources) {
+            await new Promise<void>((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                engine.addPlate(img);
+                resolve();
+              };
+              img.onerror = () => resolve();
+              img.src = src;
+            });
+          }
+          const clamped = Math.min(Math.max(stored.current, 0), stored.sources.length - 1);
+          engine.selectPlate(clamped);
+        })();
+      } else {
+        const img = new Image();
+        img.onload = () => engine.addPlate(img);
+        img.src = DEFAULT_IMG;
+      }
     }
 
     return () => engine.dispose();
@@ -76,6 +101,7 @@ export function useScatterPress() {
     }
     const isVector = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
     setStats("Pressing…");
+    persistPlatesRef.current = true;
     const rd = new FileReader();
     rd.onload = () => {
       const img = new Image();
