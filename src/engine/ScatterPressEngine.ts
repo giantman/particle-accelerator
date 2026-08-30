@@ -358,6 +358,37 @@ export class ScatterPressEngine {
     this.rebuild();
   }
 
+  // Always keeps at least one plate — callers should hide/disable delete UI
+  // once only one remains rather than relying on this to no-op.
+  removePlate(i: number) {
+    if (i < 0 || i >= this.plates.length || this.plates.length <= 1) return;
+    const wasCurrent = i === this.current;
+    this.plates.splice(i, 1);
+    if (wasCurrent) {
+      // Select whatever now sits at that index (or the new last plate, if
+      // the removed one was last) and resample from it.
+      this.selectPlate(Math.min(i, this.plates.length - 1));
+    } else {
+      if (i < this.current) this.current -= 1;
+      this.emitPlates();
+      this.emitStats();
+    }
+  }
+
+  // Reorders the plate tray. `current` is re-pointed so it keeps tracking
+  // the same logical plate through the reindex, not just the same slot.
+  movePlate(from: number, to: number) {
+    if (from === to || from < 0 || from >= this.plates.length || to < 0 || to >= this.plates.length) return;
+    const currentBefore = this.current;
+    const [moved] = this.plates.splice(from, 1);
+    this.plates.splice(to, 0, moved);
+    if (currentBefore === from) this.current = to;
+    else if (from < currentBefore && to >= currentBefore) this.current -= 1;
+    else if (from > currentBefore && to <= currentBefore) this.current += 1;
+    this.emitPlates();
+    this.emitStats();
+  }
+
   private emitPlates() {
     this.callbacks.onPlates?.(
       this.plates.map((p) => p.thumb),
@@ -495,9 +526,16 @@ export class ScatterPressEngine {
         this.vel[i * 2 + 1] = (this.randF[i * 2 + 1] - 0.5) * 2;
       }
     }
-    const plateSuffix = this.plates.length > 1 ? ` · plate ${this.current + 1}/${this.plates.length}` : "";
-    this.callbacks.onStats?.(`${count.toLocaleString()} dots · ${gw} × ${gh} cells${plateSuffix}`);
+    this.emitStats();
     this.wake();
+  }
+
+  // Shared by rebuild() and by plate list edits (remove/reorder) that don't
+  // otherwise touch the current plate's geometry, so the "plate X/Y" suffix
+  // doesn't go stale when the count or index shifts without a resample.
+  private emitStats() {
+    const plateSuffix = this.plates.length > 1 ? ` · plate ${this.current + 1}/${this.plates.length}` : "";
+    this.callbacks.onStats?.(`${this.count.toLocaleString()} dots · ${this.GW} × ${this.GH} cells${plateSuffix}`);
   }
 
   resize() {

@@ -5,6 +5,7 @@ import { PlateGroup } from "./components/PlateGroup";
 import { InkGroup } from "./components/InkGroup";
 import { PhysicsGroup } from "./components/PhysicsGroup";
 import { AssemblyGroup } from "./components/AssemblyGroup";
+import { LoopGroup } from "./components/LoopGroup";
 import { ExportMenu } from "./components/ExportMenu";
 import { Stage } from "./components/Stage";
 import { AccordionSection } from "./components/AccordionSection";
@@ -12,7 +13,7 @@ import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = ["plate", "inks", "physics", "assembly"];
+const SECTIONS = ["plate", "inks", "physics", "assembly", "loop"];
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -28,6 +29,8 @@ export default function App() {
     current,
     addPlateFromFile,
     selectPlate,
+    removePlate,
+    movePlate,
     stats,
     exportPNG,
     exportGIF,
@@ -74,6 +77,8 @@ export default function App() {
               plates={plates}
               current={current}
               onSelectPlate={selectPlate}
+              onRemovePlate={removePlate}
+              onMovePlate={movePlate}
               onAddFiles={addFiles}
             />
           </AccordionSection>
@@ -85,6 +90,9 @@ export default function App() {
           </AccordionSection>
           <AccordionSection value="assembly" title="Assembly">
             <AssemblyGroup params={params} updateParam={updateParam} replay={replay} />
+          </AccordionSection>
+          <AccordionSection value="loop" title="Loop">
+            <LoopGroup params={params} updateParam={updateParam} plateCount={plates.length} />
           </AccordionSection>
         </Accordion>
 

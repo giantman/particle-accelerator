@@ -13,11 +13,23 @@ interface PlateGroupProps {
   plates: string[];
   current: number;
   onSelectPlate: (i: number) => void;
+  onRemovePlate: (i: number) => void;
+  onMovePlate: (from: number, to: number) => void;
   onAddFiles: (files: FileList) => void;
 }
 
-export function PlateGroup({ params, updateParam, plates, current, onSelectPlate, onAddFiles }: PlateGroupProps) {
+export function PlateGroup({
+  params,
+  updateParam,
+  plates,
+  current,
+  onSelectPlate,
+  onRemovePlate,
+  onMovePlate,
+  onAddFiles,
+}: PlateGroupProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragIndexRef = useRef<number | null>(null);
 
   return (
     <>
@@ -38,19 +50,47 @@ export function PlateGroup({ params, updateParam, plates, current, onSelectPlate
       {plates.length >= 2 && (
         <div className="flex flex-wrap gap-1.5">
           {plates.map((thumb, i) => (
-            <button
+            <div
               key={i}
-              type="button"
-              className={
-                "h-9 w-[46px] cursor-pointer rounded-md border bg-cover bg-center p-0 " +
-                (i === current
-                  ? "border-primary outline-2 outline-offset-1 outline-primary"
-                  : "border-border")
-              }
-              style={{ backgroundImage: `url(${thumb})` }}
-              aria-label={`Plate ${i + 1}${i === current ? " (current)" : ""}`}
-              onClick={() => i !== current && onSelectPlate(i)}
-            />
+              className="group relative"
+              title="Drag to reorder"
+              draggable
+              onDragStart={(e) => {
+                dragIndexRef.current = i;
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = dragIndexRef.current;
+                dragIndexRef.current = null;
+                if (from !== null && from !== i) onMovePlate(from, i);
+              }}
+            >
+              <button
+                type="button"
+                className={
+                  "h-9 w-[46px] cursor-grab rounded-md border bg-cover bg-center p-0 active:cursor-grabbing " +
+                  (i === current
+                    ? "border-primary outline-2 outline-offset-1 outline-primary"
+                    : "border-border")
+                }
+                style={{ backgroundImage: `url(${thumb})` }}
+                aria-label={`Plate ${i + 1}${i === current ? " (current)" : ""}`}
+                onClick={() => i !== current && onSelectPlate(i)}
+              />
+              <button
+                type="button"
+                aria-label={`Delete plate ${i + 1}`}
+                className="absolute -top-1.5 -right-1.5 hidden size-4 items-center justify-center rounded-full border border-border bg-background text-[10px] leading-none text-foreground hover:border-destructive hover:text-destructive group-hover:flex"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemovePlate(i);
+                }}
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       )}

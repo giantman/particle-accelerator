@@ -114,6 +114,58 @@ export function useScatterPress() {
   }, []);
 
   const selectPlate = useCallback((i: number) => engineRef.current?.selectPlate(i), []);
+  const removePlate = useCallback((i: number) => engineRef.current?.removePlate(i), []);
+  const movePlate = useCallback((from: number, to: number) => engineRef.current?.movePlate(from, to), []);
+
+  // Auto-advance through plates on a timer. Reads `current`/plate count via
+  // refs (kept fresh below) rather than closing over them directly, so the
+  // interval doesn't need to restart — and lose its phase — every time the
+  // selected plate changes; it only restarts when the loop settings
+  // themselves change.
+  const currentRef = useRef(current);
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+  const plateCountRef = useRef(plates.length);
+  useEffect(() => {
+    plateCountRef.current = plates.length;
+  }, [plates.length]);
+  const loopDirectionRef = useRef(1);
+
+  useEffect(() => {
+    if (!params.loopEnabled) return;
+    // Don't gate on plateCountRef here — on reload, restored plates finish
+    // loading asynchronously after this effect first runs, and this effect
+    // doesn't depend on plate count, so it would never re-fire to create
+    // the interval once they're ready. The per-tick check below handles
+    // "not enough plates (yet)" instead.
+    const id = window.setInterval(() => {
+      const count = plateCountRef.current;
+      if (count < 2) return;
+      const cur = currentRef.current;
+      let next = cur;
+      if (params.loopMode === "shuffle") {
+        do {
+          next = Math.floor(Math.random() * count);
+        } while (next === cur && count > 1);
+      } else if (params.loopMode === "pingpong") {
+        let dir = loopDirectionRef.current;
+        next = cur + dir;
+        if (next >= count) {
+          dir = -1;
+          next = count - 2;
+        } else if (next < 0) {
+          dir = 1;
+          next = 1;
+        }
+        loopDirectionRef.current = dir;
+      } else {
+        next = (cur + 1) % count;
+      }
+      engineRef.current?.selectPlate(next);
+    }, Math.max(0.5, params.loopInterval) * 1000);
+    return () => window.clearInterval(id);
+  }, [params.loopEnabled, params.loopInterval, params.loopMode]);
 
   const exportPNG = useCallback(() => {
     const url = engineRef.current?.exportPNG();
@@ -173,6 +225,8 @@ export function useScatterPress() {
     current,
     addPlateFromFile,
     selectPlate,
+    removePlate,
+    movePlate,
     stats,
     exportPNG,
     exportGIF,

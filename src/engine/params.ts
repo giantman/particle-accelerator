@@ -1,6 +1,7 @@
 export type MarkStyle = "dot" | "ascii";
 export type MaskShape = "rect" | "square" | "oval" | "circle";
 export type OrbitPath = "circle" | "figure8" | "noisy";
+export type LoopMode = "forward" | "pingpong" | "shuffle";
 
 export interface ScatterParams {
   density: number;
@@ -35,6 +36,9 @@ export interface ScatterParams {
   charset: string;
   maskEnabled: boolean;
   mask: MaskShape;
+  loopEnabled: boolean;
+  loopInterval: number;
+  loopMode: LoopMode;
 }
 
 export const DEFAULTS: ScatterParams = {
@@ -70,6 +74,9 @@ export const DEFAULTS: ScatterParams = {
   charset: ".:-=+*#%@",
   maskEnabled: false,
   mask: "circle",
+  loopEnabled: false,
+  loopInterval: 3,
+  loopMode: "forward",
 };
 
 export const MIN_RAMP_STOPS = 2;
@@ -155,6 +162,8 @@ export const fmt: Record<
     | "attract"
     | "depthRamp"
     | "rampColors"
+    | "loopEnabled"
+    | "loopMode"
   >,
   (v: number) => string
 > = {
@@ -177,4 +186,5 @@ export const fmt: Record<
   gravity: (v) => v.toFixed(1),
   gravityAngle: (v) => Math.round(v) + "°",
   depthWeight: (v) => v.toFixed(2),
+  loopInterval: (v) => v.toFixed(1) + "s",
 };
