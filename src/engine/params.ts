@@ -9,14 +9,22 @@ export interface ScatterParams {
   invert: boolean;
   ink: string;
   paper: string;
+  depthRamp: boolean;
+  rampColors: string[];
   radius: number;
   strength: number;
   swirl: number;
   spring: number;
   stagger: number;
   orbit: boolean;
+  turbulence: number;
+  gravity: number;
+  gravityAngle: number;
+  attract: boolean;
+  depthWeight: number;
   mark: MarkStyle;
   charset: string;
+  maskEnabled: boolean;
   mask: MaskShape;
 }
 
@@ -28,16 +36,27 @@ export const DEFAULTS: ScatterParams = {
   invert: false,
   ink: "#3143EB",
   paper: "#F8F8FC",
+  depthRamp: false,
+  rampColors: ["#1F2CB4", "#3143EB", "#7A86F0"],
   radius: 0.09,
   strength: 1,
   swirl: 0.35,
   spring: 1,
   stagger: 1.1,
   orbit: false,
+  turbulence: 0,
+  gravity: 0,
+  gravityAngle: 90,
+  attract: false,
+  depthWeight: 0,
   mark: "dot",
   charset: ".:-=+*#%@",
-  mask: "rect",
+  maskEnabled: false,
+  mask: "circle",
 };
+
+export const MIN_RAMP_STOPS = 2;
+export const MAX_RAMP_STOPS = 5;
 
 const STORAGE_KEY = "scatter-press-v1";
 
@@ -66,11 +85,25 @@ export const REBUILD_KEYS: (keyof ScatterParams)[] = [
   "contrast",
   "midtone",
   "invert",
+  "maskEnabled",
   "mask",
 ];
 
 export const fmt: Record<
-  keyof Omit<ScatterParams, "invert" | "ink" | "paper" | "mark" | "charset" | "mask" | "orbit">,
+  keyof Omit<
+    ScatterParams,
+    | "invert"
+    | "ink"
+    | "paper"
+    | "mark"
+    | "charset"
+    | "maskEnabled"
+    | "mask"
+    | "orbit"
+    | "attract"
+    | "depthRamp"
+    | "rampColors"
+  >,
   (v: number) => string
 > = {
   density: (v) => String(v),
@@ -82,4 +115,8 @@ export const fmt: Record<
   swirl: (v) => v.toFixed(2),
   spring: (v) => v.toFixed(1) + "×",
   stagger: (v) => v.toFixed(1) + "s",
+  turbulence: (v) => v.toFixed(2),
+  gravity: (v) => v.toFixed(1),
+  gravityAngle: (v) => Math.round(v) + "°",
+  depthWeight: (v) => v.toFixed(2),
 };

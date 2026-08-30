@@ -45,15 +45,20 @@ export class ScatterPressEngine {
   private uMode!: WebGLUniformLocation | null;
   private uGlyphN!: WebGLUniformLocation | null;
   private uAtlasLoc!: WebGLUniformLocation | null;
+  private uRampLoc!: WebGLUniformLocation | null;
+  private uUseRamp!: WebGLUniformLocation | null;
   private bufPos!: WebGLBuffer | null;
   private bufCov!: WebGLBuffer | null;
   private bufRand!: WebGLBuffer | null;
+  private bufRampT!: WebGLBuffer | null;
   private locPos = 0;
   private locCov = 0;
   private locRand = 0;
+  private locRampT = 0;
 
   private atlasTex: WebGLTexture | null = null;
   private glyphN = 1;
+  private rampTex: WebGLTexture | null = null;
 
   private count = 0;
   private home = new Float32Array(0);
@@ -117,6 +122,7 @@ export class ScatterPressEngine {
     if (this.gl) {
       this.initGL();
       this.buildAtlas();
+      this.buildRamp();
       if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(() => this.buildAtlas());
       }
@@ -147,9 +153,10 @@ export class ScatterPressEngine {
   private initGL() {
     const gl = this.gl!;
     const vsrc = `
-      attribute vec2 aPos; attribute float aCov; attribute vec2 aRand;
+      attribute vec2 aPos; attribute float aCov; attribute vec2 aRand; attribute float aRampT;
       uniform vec2 uSize; uniform float uCell, uDpr, uScale, uMode;
       varying float vCov;
+      varying float vRampT;
       void main() {
         vec2 clip = vec2(aPos.x / uSize.x * 2.0 - 1.0, 1.0 - aPos.y / uSize.y * 2.0);
         gl_Position = vec4(clip, 0.0, 1.0);
@@ -158,13 +165,16 @@ export class ScatterPressEngine {
         float d = mix(dDot, dChar, uMode);
         gl_PointSize = max(d * uDpr, 1.15);
         vCov = aCov;
+        vRampT = aRampT;
       }`;
     const fsrc = `
       precision mediump float;
       uniform vec3 uInk;
-      uniform highp float uMode, uGlyphN;
+      uniform highp float uMode, uGlyphN, uUseRamp;
       uniform sampler2D uAtlas;
+      uniform sampler2D uRamp;
       varying float vCov;
+      varying float vRampT;
       void main() {
         float a;
         if (uMode < 0.5) {
@@ -176,7 +186,8 @@ export class ScatterPressEngine {
           a = texture2D(uAtlas, uv).a;
         }
         if (a < 0.01) discard;
-        gl_FragColor = vec4(uInk, a);
+        vec3 col = uUseRamp > 0.5 ? texture2D(uRamp, vec2(vRampT, 0.5)).rgb : uInk;
+        gl_FragColor = vec4(col, a);
       }`;
     const sh = (t: number, s: string) => {
       const o = gl.createShader(t)!;
@@ -202,16 +213,22 @@ export class ScatterPressEngine {
     this.uMode = gl.getUniformLocation(prog, "uMode");
     this.uGlyphN = gl.getUniformLocation(prog, "uGlyphN");
     this.uAtlasLoc = gl.getUniformLocation(prog, "uAtlas");
+    this.uRampLoc = gl.getUniformLocation(prog, "uRamp");
+    this.uUseRamp = gl.getUniformLocation(prog, "uUseRamp");
     gl.uniform1i(this.uAtlasLoc, 0);
+    gl.uniform1i(this.uRampLoc, 1);
     this.bufPos = gl.createBuffer();
     this.bufCov = gl.createBuffer();
     this.bufRand = gl.createBuffer();
+    this.bufRampT = gl.createBuffer();
     this.locPos = gl.getAttribLocation(prog, "aPos");
     this.locCov = gl.getAttribLocation(prog, "aCov");
     this.locRand = gl.getAttribLocation(prog, "aRand");
+    this.locRampT = gl.getAttribLocation(prog, "aRampT");
     gl.enableVertexAttribArray(this.locPos);
     gl.enableVertexAttribArray(this.locCov);
     gl.enableVertexAttribArray(this.locRand);
+    gl.enableVertexAttribArray(this.locRampT);
   }
 
   private buildAtlas() {
@@ -240,6 +257,40 @@ export class ScatterPressEngine {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.wake();
+  }
+
+  // A 1D gradient (256x1) across the coverage value, blended from the ramp's
+  // color stops. Sampled directly in the fragment shader — cheap and smooth
+  // regardless of how many stops the designer has added.
+  private buildRamp() {
+    const gl = this.gl;
+    if (!gl) return;
+    const stops = this.params.rampColors.length >= 2 ? this.params.rampColors : [this.params.ink, this.params.ink];
+    const W = 256;
+    const data = new Uint8Array(W * 4);
+    const segCount = stops.length - 1;
+    for (let x = 0; x < W; x++) {
+      const t = x / (W - 1);
+      const segF = t * segCount;
+      const i0 = Math.min(segCount - 1, Math.floor(segF));
+      const localT = segF - i0;
+      const c0 = this.hex2rgb(stops[i0]);
+      const c1 = this.hex2rgb(stops[i0 + 1]);
+      data[x * 4] = Math.round((c0[0] + (c1[0] - c0[0]) * localT) * 255);
+      data[x * 4 + 1] = Math.round((c0[1] + (c1[1] - c0[1]) * localT) * 255);
+      data[x * 4 + 2] = Math.round((c0[2] + (c1[2] - c0[2]) * localT) * 255);
+      data[x * 4 + 3] = 255;
+    }
+    if (!this.rampTex) this.rampTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.rampTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, W, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.activeTexture(gl.TEXTURE0);
     this.wake();
   }
 
@@ -311,6 +362,32 @@ export class ScatterPressEngine {
     return { cov, gw, gh };
   }
 
+  // Histogram-equalize coverage values into a rank/percentile in [0,1] across
+  // the actual dot population, so the depth ramp's colors are spread evenly
+  // across dots regardless of how skewed the source image's tonal range is
+  // (e.g. a mostly-midtone photo would otherwise crowd into one ramp color).
+  private equalize(cov: Float32Array, count: number): Float32Array {
+    const BINS = 256;
+    const hist = new Float32Array(BINS);
+    for (let i = 0; i < count; i++) {
+      const b = Math.min(BINS - 1, Math.max(0, Math.floor(cov[i] * BINS)));
+      hist[b]++;
+    }
+    const cdf = new Float32Array(BINS);
+    let acc = 0;
+    for (let b = 0; b < BINS; b++) {
+      acc += hist[b];
+      cdf[b] = acc;
+    }
+    const total = Math.max(1, count);
+    const out = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const b = Math.min(BINS - 1, Math.max(0, Math.floor(cov[i] * BINS)));
+      out[i] = cdf[b] / total;
+    }
+    return out;
+  }
+
   // ---------- geometry rebuild ----------
   rebuild() {
     const gl = this.gl;
@@ -326,7 +403,7 @@ export class ScatterPressEngine {
     const gw2 = gw / 2,
       gh2 = gh / 2,
       mrad = Math.min(gw, gh) / 2;
-    const shape = this.params.mask || "rect";
+    const shape = this.params.maskEnabled ? this.params.mask : "rect";
     const inMask = (gx: number, gy: number) => {
       if (shape === "rect") return true;
       const dx = gx + 0.5 - gw2,
@@ -359,9 +436,13 @@ export class ScatterPressEngine {
     this.home = new Float32Array(count * 2);
     this.pos = new Float32Array(count * 2);
     this.vel = new Float32Array(count * 2);
+    const rampT = this.equalize(this.covArr, count);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufCov);
     gl.bufferData(gl.ARRAY_BUFFER, this.covArr, gl.STATIC_DRAW);
     gl.vertexAttribPointer(this.locCov, 1, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bufRampT);
+    gl.bufferData(gl.ARRAY_BUFFER, rampT, gl.STATIC_DRAW);
+    gl.vertexAttribPointer(this.locRampT, 1, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufRand);
     gl.bufferData(gl.ARRAY_BUFFER, this.randF, gl.STATIC_DRAW);
     gl.vertexAttribPointer(this.locRand, 2, gl.FLOAT, false, 0, 0);
@@ -464,6 +545,17 @@ export class ScatterPressEngine {
     const kick = this.reduced ? 0 : this.W * 0.006 * p.strength;
     const STAG = p.stagger * 1000;
     const ti = now - this.t0;
+    const t = now / 1000;
+    const orbitOn = p.orbit && !this.reduced;
+    const turbOn = p.turbulence > 0 && !this.reduced;
+    const gravOn = p.gravity > 0 && !this.reduced;
+    const depthOn = p.depthWeight > 0 && this.covArr.length === this.count;
+    const attractDir = p.attract ? -1 : 1;
+    const turbAmp = this.cell * 1.6 * p.turbulence;
+    const gRad = (p.gravityAngle * Math.PI) / 180;
+    const gAccel = p.gravity * (this.W / 640) * 0.05;
+    const gAx = Math.cos(gRad) * gAccel;
+    const gAy = Math.sin(gRad) * gAccel;
     let energy = 0;
     for (let i = 0; i < this.count; i++) {
       const ix = i * 2,
@@ -480,16 +572,33 @@ export class ScatterPressEngine {
         energy += 1;
         continue;
       }
+      // Depth-weighted response: dots sampled from denser ink are treated as
+      // heavier, so every force below (spring, gravity, turbulence, pointer)
+      // moves them less — a cheap parallax/inertia cue tied to the plate art.
+      const wgt = depthOn ? 1 / (1 + this.covArr[i] * p.depthWeight * 3) : 1;
       let hx = this.home[ix];
       let hy = this.home[iy];
-      if (p.orbit && !this.reduced) {
-        const angle = this.randF[ix] * Math.PI * 2 + (now / 1000) * ORBIT_SPEED;
+      if (orbitOn) {
+        const angle = this.randF[ix] * Math.PI * 2 + t * ORBIT_SPEED;
         const amp = this.cell * ORBIT_AMPLITUDE;
         hx += Math.cos(angle) * amp;
         hy += Math.sin(angle) * amp;
       }
-      let vx = (this.vel[ix] + (hx - px) * (K * (0.7 + 0.6 * this.randF[ix]))) * DAMP;
-      let vy = (this.vel[iy] + (hy - py) * (K * (0.7 + 0.6 * this.randF[iy]))) * DAMP;
+      if (turbOn) {
+        // Sum of two off-frequency sines per particle, phase-shifted by its
+        // random seed, so the drift reads as loose ambient noise rather than
+        // a synchronized wobble.
+        const ph = this.randF[ix] * 6.2832,
+          ph2 = this.randF[iy] * 6.2832;
+        hx += (Math.sin(t * 0.7 + ph) + Math.sin(t * 1.9 + ph * 1.7)) * 0.5 * turbAmp;
+        hy += (Math.cos(t * 0.8 + ph2) + Math.sin(t * 2.3 + ph2 * 1.3)) * 0.5 * turbAmp;
+      }
+      let vx = (this.vel[ix] + (hx - px) * (K * (0.7 + 0.6 * this.randF[ix]) * wgt)) * DAMP;
+      let vy = (this.vel[iy] + (hy - py) * (K * (0.7 + 0.6 * this.randF[iy]) * wgt)) * DAMP;
+      if (gravOn) {
+        vx += gAx * wgt;
+        vy += gAy * wgt;
+      }
       if (this.mAct && kick) {
         const dx = px - this.mx,
           dy = py - this.my,
@@ -497,7 +606,7 @@ export class ScatterPressEngine {
         if (d2 < R2) {
           const d = Math.sqrt(d2) + 4;
           const f = 1 - d / R;
-          const s = (kick * f * f) / d;
+          const s = (kick * f * f * attractDir * wgt) / d;
           const sw = p.swirl;
           vx += dx * s - dy * s * sw * (this.randF[ix] - 0.5) * 2.0;
           vy += dy * s + dx * s * sw * (this.randF[iy] - 0.5) * 2.0;
@@ -527,6 +636,7 @@ export class ScatterPressEngine {
     gl.uniform1f(this.uScale, p.dotScale);
     gl.uniform1f(this.uMode, p.mark === "ascii" ? 1 : 0);
     gl.uniform1f(this.uGlyphN, this.glyphN);
+    gl.uniform1f(this.uUseRamp, p.depthRamp ? 1 : 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufPos);
     gl.vertexAttribPointer(this.locPos, 2, gl.FLOAT, false, 0, 0);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.pos);
@@ -537,8 +647,8 @@ export class ScatterPressEngine {
     const e = this.step(now);
     this.draw();
     const introDone = now - this.t0 > this.params.stagger * 1000 + 2500;
-    const orbiting = this.params.orbit && !this.reduced;
-    this.still = !orbiting && e < 0.0004 && !this.mAct && introDone ? this.still + 1 : 0;
+    const restless = (this.params.orbit || this.params.turbulence > 0) && !this.reduced;
+    this.still = !restless && e < 0.0004 && !this.mAct && introDone ? this.still + 1 : 0;
     if (this.still > 45) {
       this.raf = 0;
       return;
@@ -567,6 +677,7 @@ export class ScatterPressEngine {
     const keys = Object.keys(patch);
     if (keys.some((k) => REBUILD_KEY_SET.has(k))) this.queueRebuild();
     if ("charset" in patch) this.queueAtlas();
+    if ("rampColors" in patch) this.buildRamp();
     this.wake();
   }
 
@@ -574,6 +685,7 @@ export class ScatterPressEngine {
     this.params = { ...params };
     saveParams(this.params);
     this.buildAtlas();
+    this.buildRamp();
     this.rebuild();
   }
 

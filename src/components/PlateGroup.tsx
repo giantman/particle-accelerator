@@ -137,18 +137,31 @@ export function PlateGroup({ params, updateParam, plates, current, onSelectPlate
       </div>
 
       <div className="row">
-        <label htmlFor="maskShape">MASK</label>
-        <select
-          id="maskShape"
-          value={params.mask}
-          onChange={(e) => updateParam("mask", e.target.value as MaskShape)}
-        >
-          <option value="rect">RECTANGLE</option>
-          <option value="square">SQUARE</option>
-          <option value="oval">OVAL</option>
-          <option value="circle">CIRCLE</option>
-        </select>
+        <span className="check">
+          <input
+            type="checkbox"
+            id="maskEnabled"
+            checked={params.maskEnabled}
+            onChange={(e) => updateParam("maskEnabled", e.target.checked)}
+          />
+          <label htmlFor="maskEnabled">MASK</label>
+        </span>
       </div>
+
+      {params.maskEnabled && (
+        <div className="row">
+          <label htmlFor="maskShape">SHAPE</label>
+          <select
+            id="maskShape"
+            value={params.mask}
+            onChange={(e) => updateParam("mask", e.target.value as MaskShape)}
+          >
+            <option value="square">SQUARE</option>
+            <option value="oval">OVAL</option>
+            <option value="circle">CIRCLE</option>
+          </select>
+        </div>
+      )}
     </div>
   );
 }
