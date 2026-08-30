@@ -114,7 +114,7 @@ export function PlateGroup({ params, updateParam, plates, current, onSelectPlate
         id="dotScale"
         label="Dot size"
         min={0.6}
-        max={1.8}
+        max={3}
         step={0.05}
         value={params.dotScale}
         format={fmt.dotScale}

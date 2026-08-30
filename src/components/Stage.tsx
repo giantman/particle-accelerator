@@ -5,10 +5,11 @@ interface StageProps {
   frameRef: RefObject<HTMLDivElement>;
   stats: string;
   glAvailable: boolean;
+  paper: string;
   onDropFiles: (files: FileList) => void;
 }
 
-export function Stage({ canvasRef, frameRef, stats, glAvailable, onDropFiles }: StageProps) {
+export function Stage({ canvasRef, frameRef, stats, glAvailable, paper, onDropFiles }: StageProps) {
   const [dragover, setDragover] = useState(false);
 
   const enter = (e: DragEvent) => {
@@ -28,7 +29,8 @@ export function Stage({ canvasRef, frameRef, stats, glAvailable, onDropFiles }: 
   return (
     <div className="flex h-screen min-w-0 flex-1 flex-col">
       <div
-        className="relative flex flex-1 min-h-0 items-center justify-center bg-background"
+        className="relative flex flex-1 min-h-0 items-center justify-center"
+        style={{ backgroundColor: paper }}
         ref={frameRef}
         onDragEnter={enter}
         onDragOver={enter}

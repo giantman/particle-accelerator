@@ -12,7 +12,6 @@ export interface ScatterPressCallbacks {
 
 const REBUILD_KEY_SET = new Set<string>(REBUILD_KEYS);
 const MAX_PLATES = 12;
-const ORBIT_SPEED = 1.3; // radians/sec
 const ORBIT_AMPLITUDE = 1.2; // fraction of a grid cell, at orbitStrength 1×
 
 /**
@@ -64,6 +63,7 @@ export class ScatterPressEngine {
   private home = new Float32Array(0);
   private homeU = new Float32Array(0);
   private covArr = new Float32Array(0);
+  private rampTArr = new Float32Array(0);
   private pos = new Float32Array(0);
   private vel = new Float32Array(0);
   private randF = new Float32Array(0);
@@ -260,26 +260,37 @@ export class ScatterPressEngine {
     this.wake();
   }
 
+  // Interpolates the depth ramp's color stops at t in [0,1]. Shared by
+  // buildRamp() (which bakes this into a GPU texture for live rendering)
+  // and exportSVG() (which needs concrete per-particle colors on the CPU).
+  private rampColorAt(t: number): [number, number, number] {
+    const stops = this.params.rampColors.length >= 2 ? this.params.rampColors : [this.params.ink, this.params.ink];
+    const segCount = stops.length - 1;
+    const segF = t * segCount;
+    const i0 = Math.min(segCount - 1, Math.floor(segF));
+    const localT = segF - i0;
+    const c0 = this.hex2rgb(stops[i0]);
+    const c1 = this.hex2rgb(stops[i0 + 1]);
+    return [
+      c0[0] + (c1[0] - c0[0]) * localT,
+      c0[1] + (c1[1] - c0[1]) * localT,
+      c0[2] + (c1[2] - c0[2]) * localT,
+    ];
+  }
+
   // A 1D gradient (256x1) across the coverage value, blended from the ramp's
   // color stops. Sampled directly in the fragment shader — cheap and smooth
   // regardless of how many stops the designer has added.
   private buildRamp() {
     const gl = this.gl;
     if (!gl) return;
-    const stops = this.params.rampColors.length >= 2 ? this.params.rampColors : [this.params.ink, this.params.ink];
     const W = 256;
     const data = new Uint8Array(W * 4);
-    const segCount = stops.length - 1;
     for (let x = 0; x < W; x++) {
-      const t = x / (W - 1);
-      const segF = t * segCount;
-      const i0 = Math.min(segCount - 1, Math.floor(segF));
-      const localT = segF - i0;
-      const c0 = this.hex2rgb(stops[i0]);
-      const c1 = this.hex2rgb(stops[i0 + 1]);
-      data[x * 4] = Math.round((c0[0] + (c1[0] - c0[0]) * localT) * 255);
-      data[x * 4 + 1] = Math.round((c0[1] + (c1[1] - c0[1]) * localT) * 255);
-      data[x * 4 + 2] = Math.round((c0[2] + (c1[2] - c0[2]) * localT) * 255);
+      const c = this.rampColorAt(x / (W - 1));
+      data[x * 4] = Math.round(c[0] * 255);
+      data[x * 4 + 1] = Math.round(c[1] * 255);
+      data[x * 4 + 2] = Math.round(c[2] * 255);
       data[x * 4 + 3] = 255;
     }
     if (!this.rampTex) this.rampTex = gl.createTexture();
@@ -440,6 +451,7 @@ export class ScatterPressEngine {
     this.pos = new Float32Array(count * 2);
     this.vel = new Float32Array(count * 2);
     const rampT = this.equalize(this.covArr, this.randF, count);
+    this.rampTArr = new Float32Array(rampT);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufCov);
     gl.bufferData(gl.ARRAY_BUFFER, this.covArr, gl.STATIC_DRAW);
     gl.vertexAttribPointer(this.locCov, 1, gl.FLOAT, false, 0, 0);
@@ -601,10 +613,37 @@ export class ScatterPressEngine {
       let hx = this.home[ix];
       let hy = this.home[iy];
       if (orbitOn) {
-        const angle = this.randF[ix] * Math.PI * 2 + t * ORBIT_SPEED;
-        const amp = this.cell * ORBIT_AMPLITUDE * p.orbitStrength;
-        hx += Math.cos(angle) * amp;
-        hy += Math.sin(angle) * amp;
+        const angle = this.randF[ix] * Math.PI * 2 + t * p.orbitSpeed;
+        // Depth-linked radius: denser ink orbits tighter, same "heavier"
+        // metaphor as depthWeight, giving a layered/parallax sweep instead
+        // of every dot tracing the same-size loop.
+        const depthMul = p.orbitDepthLink > 0 ? 1 / (1 + this.covArr[i] * p.orbitDepthLink * 2) : 1;
+        const baseAmp = this.cell * ORBIT_AMPLITUDE * p.orbitStrength * depthMul;
+        const ampY = baseAmp * (1 - p.orbitEccentricity);
+        let cx: number, cy: number;
+        if (p.orbitPath === "figure8") {
+          // Lissajous 1:2 frequency ratio traces a figure-eight/lemniscate.
+          cx = Math.sin(angle * 2) * baseAmp;
+          cy = Math.sin(angle) * ampY;
+        } else {
+          cx = Math.cos(angle) * baseAmp;
+          cy = Math.sin(angle) * ampY;
+          if (p.orbitPath === "noisy") {
+            const ph = this.randF[iy] * 6.2832;
+            cx += Math.sin(t * 1.3 + ph) * baseAmp * 0.35;
+            cy += Math.cos(t * 1.1 + ph * 1.4) * baseAmp * 0.35;
+          }
+        }
+        if (p.orbitAngle) {
+          const rad = (p.orbitAngle * Math.PI) / 180;
+          const cosA = Math.cos(rad),
+            sinA = Math.sin(rad);
+          hx += cx * cosA - cy * sinA;
+          hy += cx * sinA + cy * cosA;
+        } else {
+          hx += cx;
+          hy += cy;
+        }
       }
       if (turbOn) {
         // Sum of two off-frequency sines per particle, phase-shifted by its
@@ -784,6 +823,99 @@ export class ScatterPressEngine {
       return new Blob([new Uint8Array(gif.bytes())], { type: "image/gif" });
     } finally {
       this.gifBusy = false;
+      this.wake();
+    }
+  }
+
+  private svgBusy = false;
+
+  // Exports a short, seamlessly-looping animated SVG of whatever motion is
+  // currently playing, using SMIL <animate> to move each dot along its
+  // captured path. Unlike PNG/GIF this scales with element count rather
+  // than pixels, so — unlike those — it samples down to a capped number of
+  // dots rather than exporting every one, and only covers dot mode (ascii
+  // glyphs aren't practical to animate as SVG text at this scale).
+  async exportSVG(): Promise<string | null> {
+    if (!this.gl || !this.count || this.svgBusy) return null;
+    this.svgBusy = true;
+    try {
+      if (this.raf) {
+        cancelAnimationFrame(this.raf);
+        this.raf = 0;
+      }
+
+      const p = this.params;
+      const FPS = 12;
+      const DURATION_MS = 1800;
+      const FRAME_DELAY = Math.round(1000 / FPS);
+      const TOTAL_FRAMES = Math.round(DURATION_MS / FRAME_DELAY);
+      const MAX_DOTS = 4000;
+
+      const stride = Math.max(1, Math.ceil(this.count / MAX_DOTS));
+      const indices: number[] = [];
+      for (let i = 0; i < this.count; i += stride) indices.push(i);
+
+      const framesX: Float32Array[] = [];
+      const framesY: Float32Array[] = [];
+      let now = performance.now();
+      for (let f = 0; f < TOTAL_FRAMES; f++) {
+        now += FRAME_DELAY;
+        this.step(now);
+        const xs = new Float32Array(indices.length);
+        const ys = new Float32Array(indices.length);
+        for (let k = 0; k < indices.length; k++) {
+          xs[k] = this.pos[indices[k] * 2];
+          ys[k] = this.pos[indices[k] * 2 + 1];
+        }
+        framesX.push(xs);
+        framesY.push(ys);
+        // Yield periodically so a long capture doesn't freeze the tab.
+        if (f % 4 === 3) await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      // Repeat the first frame as the last so the loop has no visible seam.
+      framesX.push(framesX[0]);
+      framesY.push(framesY[0]);
+
+      const durSec = (TOTAL_FRAMES * FRAME_DELAY) / 1000;
+      const toHex = (c: [number, number, number]) =>
+        "#" +
+        c
+          .map((v) =>
+            Math.max(0, Math.min(255, Math.round(v * 255)))
+              .toString(16)
+              .padStart(2, "0")
+          )
+          .join("");
+
+      const useGroupFill = !p.depthRamp;
+      const parts: string[] = [];
+      parts.push(
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${this.W} ${this.H}" width="${this.W}" height="${this.H}">`
+      );
+      parts.push(`<rect width="${this.W}" height="${this.H}" fill="${toHex(this.hex2rgb(p.paper))}"/>`);
+      parts.push(useGroupFill ? `<g fill="${toHex(this.hex2rgb(p.ink))}">` : `<g>`);
+
+      for (let k = 0; k < indices.length; k++) {
+        const i = indices[k];
+        const cov = this.covArr[i];
+        const rand = this.randF[i * 2];
+        const d = this.cell * p.dotScale * (1.2 * Math.sqrt(cov) + 0.5 * cov * cov) * (0.94 + 0.12 * rand);
+        const r = Math.max(0.3, d / 2).toFixed(2);
+        const cxVals = framesX.map((f) => f[k].toFixed(1)).join(";");
+        const cyVals = framesY.map((f) => f[k].toFixed(1)).join(";");
+        const fillAttr = useGroupFill ? "" : ` fill="${toHex(this.rampColorAt(this.rampTArr[i]))}"`;
+        parts.push(
+          `<circle cx="${framesX[0][k].toFixed(1)}" cy="${framesY[0][k].toFixed(1)}" r="${r}"${fillAttr}>` +
+            `<animate attributeName="cx" values="${cxVals}" dur="${durSec}s" repeatCount="indefinite"/>` +
+            `<animate attributeName="cy" values="${cyVals}" dur="${durSec}s" repeatCount="indefinite"/>` +
+            `</circle>`
+        );
+      }
+      parts.push(`</g>`);
+      parts.push(`</svg>`);
+      return parts.join("");
+    } finally {
+      this.svgBusy = false;
       this.wake();
     }
   }

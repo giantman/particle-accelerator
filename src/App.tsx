@@ -32,6 +32,8 @@ export default function App() {
     exportPNG,
     exportGIF,
     gifExporting,
+    exportSVG,
+    svgExporting,
     glAvailable,
   } = useScatterPress();
 
@@ -50,7 +52,13 @@ export default function App() {
       >
         {sidebarOpen ? <X /> : <Menu />}
       </Button>
-      <ExportMenu onExportPNG={exportPNG} onExportGIF={exportGIF} gifExporting={gifExporting} />
+      <ExportMenu
+        onExportPNG={exportPNG}
+        onExportGIF={exportGIF}
+        gifExporting={gifExporting}
+        onExportSVG={exportSVG}
+        svgExporting={svgExporting}
+      />
 
       <aside
         className={cn(
@@ -90,6 +98,7 @@ export default function App() {
         frameRef={frameRef}
         stats={stats}
         glAvailable={glAvailable}
+        paper={params.paper}
         onDropFiles={addFiles}
       />
       <noscript>The press needs JavaScript to run.</noscript>

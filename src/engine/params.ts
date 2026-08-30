@@ -1,5 +1,6 @@
 export type MarkStyle = "dot" | "ascii";
 export type MaskShape = "rect" | "square" | "oval" | "circle";
+export type OrbitPath = "circle" | "figure8" | "noisy";
 
 export interface ScatterParams {
   density: number;
@@ -19,6 +20,11 @@ export interface ScatterParams {
   stagger: number;
   orbit: boolean;
   orbitStrength: number;
+  orbitSpeed: number;
+  orbitDepthLink: number;
+  orbitEccentricity: number;
+  orbitAngle: number;
+  orbitPath: OrbitPath;
   turbulence: number;
   gravity: number;
   gravityAngle: number;
@@ -48,6 +54,11 @@ export const DEFAULTS: ScatterParams = {
   stagger: 1.1,
   orbit: false,
   orbitStrength: 1,
+  orbitSpeed: 1.3,
+  orbitDepthLink: 0,
+  orbitEccentricity: 0,
+  orbitAngle: 0,
+  orbitPath: "circle",
   turbulence: 0,
   gravity: 0,
   gravityAngle: 90,
@@ -104,6 +115,7 @@ export const fmt: Record<
     | "maskEnabled"
     | "mask"
     | "orbit"
+    | "orbitPath"
     | "attract"
     | "depthRamp"
     | "rampColors"
@@ -121,6 +133,10 @@ export const fmt: Record<
   spring: (v) => v.toFixed(1) + "×",
   stagger: (v) => v.toFixed(1) + "s",
   orbitStrength: (v) => v.toFixed(1) + "×",
+  orbitSpeed: (v) => v.toFixed(1) + " rad/s",
+  orbitDepthLink: (v) => v.toFixed(2),
+  orbitEccentricity: (v) => v.toFixed(2),
+  orbitAngle: (v) => Math.round(v) + "°",
   turbulence: (v) => v.toFixed(2),
   gravity: (v) => v.toFixed(1),
   gravityAngle: (v) => Math.round(v) + "°",

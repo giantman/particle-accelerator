@@ -11,9 +11,18 @@ interface ExportMenuProps {
   onExportPNG: () => void;
   onExportGIF: () => void;
   gifExporting: boolean;
+  onExportSVG: () => void;
+  svgExporting: boolean;
 }
 
-export function ExportMenu({ onExportPNG, onExportGIF, gifExporting }: ExportMenuProps) {
+export function ExportMenu({
+  onExportPNG,
+  onExportGIF,
+  gifExporting,
+  onExportSVG,
+  svgExporting,
+}: ExportMenuProps) {
+  const busy = gifExporting || svgExporting;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -24,13 +33,16 @@ export function ExportMenu({ onExportPNG, onExportGIF, gifExporting }: ExportMen
           aria-label="Export"
           className="fixed top-4 right-4 z-50 bg-background"
         >
-          {gifExporting ? <Loader2 className="animate-spin" /> : <Download />}
+          {busy ? <Loader2 className="animate-spin" /> : <Download />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onExportPNG}>Export PNG</DropdownMenuItem>
-        <DropdownMenuItem onSelect={onExportGIF} disabled={gifExporting}>
+        <DropdownMenuItem onSelect={onExportGIF} disabled={busy}>
           {gifExporting ? "Rendering GIF…" : "Export GIF"}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={onExportSVG} disabled={busy}>
+          {svgExporting ? "Rendering SVG…" : "Export animated SVG"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

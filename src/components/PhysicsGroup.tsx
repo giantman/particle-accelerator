@@ -1,6 +1,8 @@
 import { RangeRow } from "./RangeRow";
 import { CheckboxField } from "./CheckboxField";
-import { fmt, type ScatterParams } from "../engine/params";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { fmt, type OrbitPath, type ScatterParams } from "../engine/params";
 
 interface PhysicsGroupProps {
   params: ScatterParams;
@@ -67,16 +69,75 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
         onCheckedChange={(v) => updateParam("orbit", v)}
       />
       {params.orbit && (
-        <RangeRow
-          id="orbitStrength"
-          label="Orbit strength"
-          min={0}
-          max={8}
-          step={0.2}
-          value={params.orbitStrength}
-          format={fmt.orbitStrength}
-          onChange={(v) => updateParam("orbitStrength", v)}
-        />
+        <>
+          <RangeRow
+            id="orbitStrength"
+            label="Orbit strength"
+            min={0}
+            max={8}
+            step={0.2}
+            value={params.orbitStrength}
+            format={fmt.orbitStrength}
+            onChange={(v) => updateParam("orbitStrength", v)}
+          />
+          <RangeRow
+            id="orbitSpeed"
+            label="Orbit speed"
+            min={0.1}
+            max={4}
+            step={0.1}
+            value={params.orbitSpeed}
+            format={fmt.orbitSpeed}
+            onChange={(v) => updateParam("orbitSpeed", v)}
+          />
+          <div className="flex items-center justify-between gap-2.5">
+            <Label htmlFor="orbitPath" className="w-28 shrink-0 text-xs font-normal text-muted-foreground">
+              Orbit path
+            </Label>
+            <Select value={params.orbitPath} onValueChange={(v) => updateParam("orbitPath", v as OrbitPath)}>
+              <SelectTrigger id="orbitPath" size="sm" className="flex-1 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="circle">Circle</SelectItem>
+                <SelectItem value="figure8">Figure 8</SelectItem>
+                <SelectItem value="noisy">Noisy</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <RangeRow
+            id="orbitEccentricity"
+            label="Orbit eccentricity"
+            min={0}
+            max={0.9}
+            step={0.05}
+            value={params.orbitEccentricity}
+            format={fmt.orbitEccentricity}
+            onChange={(v) => updateParam("orbitEccentricity", v)}
+          />
+          {params.orbitEccentricity > 0 && (
+            <RangeRow
+              id="orbitAngle"
+              label="Orbit angle"
+              min={0}
+              max={180}
+              step={5}
+              value={params.orbitAngle}
+              format={fmt.orbitAngle}
+              onChange={(v) => updateParam("orbitAngle", v)}
+            />
+          )}
+          <RangeRow
+            id="orbitDepthLink"
+            label="Orbit depth link"
+            min={0}
+            max={1}
+            step={0.05}
+            value={params.orbitDepthLink}
+            format={fmt.orbitDepthLink}
+            onChange={(v) => updateParam("orbitDepthLink", v)}
+          />
+        </>
       )}
       <CheckboxField
         id="attract"

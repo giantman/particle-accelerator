@@ -14,6 +14,7 @@ export function useScatterPress() {
   const [stats, setStats] = useState("");
   const [glAvailable, setGlAvailable] = useState(true);
   const [gifExporting, setGifExporting] = useState(false);
+  const [svgExporting, setSvgExporting] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -115,6 +116,25 @@ export function useScatterPress() {
     }
   }, [gifExporting]);
 
+  const exportSVG = useCallback(async () => {
+    if (!engineRef.current || svgExporting) return;
+    setSvgExporting(true);
+    setStats("Rendering SVG…");
+    try {
+      const svg = await engineRef.current.exportSVG();
+      if (!svg) return;
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scatter-press.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSvgExporting(false);
+    }
+  }, [svgExporting]);
+
   return {
     canvasRef,
     frameRef,
@@ -131,6 +151,8 @@ export function useScatterPress() {
     exportPNG,
     exportGIF,
     gifExporting,
+    exportSVG,
+    svgExporting,
     glAvailable,
   };
 }
