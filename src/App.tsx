@@ -28,42 +28,31 @@ export default function App() {
 
   return (
     <div className="studio">
-      <header>
-        <p className="eyebrow">TWO-COLOR HALFTONE ENGINE</p>
-        <h1>Scatter Press</h1>
-        <p className="hint">
-          Drop any photo on the plate. Hover stirs the ink; click fires a blast; every dial below re-tunes the
-          press.
-        </p>
-      </header>
-
-      <div className="layout">
-        <aside>
-          <PlateGroup
-            params={params}
-            updateParam={updateParam}
-            plates={plates}
-            current={current}
-            onSelectPlate={selectPlate}
-            onAddFiles={addFiles}
-          />
-          <InkGroup params={params} updateParam={updateParam} swapInks={swapInks} />
-          <PhysicsGroup params={params} updateParam={updateParam} />
-          <AssemblyGroup params={params} updateParam={updateParam} replay={replay} />
-          <ExportGroup onExportPNG={exportPNG} />
-          <button className="btn ghost" type="button" onClick={resetAll}>
-            RESET PRESS
-          </button>
-        </aside>
-
-        <Stage
-          canvasRef={canvasRef}
-          frameRef={frameRef}
-          stats={stats}
-          glAvailable={glAvailable}
-          onDropFiles={addFiles}
+      <aside>
+        <PlateGroup
+          params={params}
+          updateParam={updateParam}
+          plates={plates}
+          current={current}
+          onSelectPlate={selectPlate}
+          onAddFiles={addFiles}
         />
-      </div>
+        <InkGroup params={params} updateParam={updateParam} swapInks={swapInks} />
+        <PhysicsGroup params={params} updateParam={updateParam} />
+        <AssemblyGroup params={params} updateParam={updateParam} replay={replay} />
+        <ExportGroup onExportPNG={exportPNG} />
+        <button className="btn ghost" type="button" onClick={resetAll}>
+          RESET
+        </button>
+      </aside>
+
+      <Stage
+        canvasRef={canvasRef}
+        frameRef={frameRef}
+        stats={stats}
+        glAvailable={glAvailable}
+        onDropFiles={addFiles}
+      />
       <noscript>The press needs JavaScript to run.</noscript>
     </div>
   );

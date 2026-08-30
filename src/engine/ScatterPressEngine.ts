@@ -474,10 +474,15 @@ export class ScatterPressEngine {
     if (!gl || !this.count) return;
     const frame = this.canvas.parentElement;
     if (!frame) return;
-    const availW = frame.clientWidth - 3;
-    const maxH = Math.max(320, Math.min(720, innerHeight * 0.78));
-    const cssW = Math.min(availW, Math.round((maxH * this.GW) / this.GH));
-    const cssH = Math.round((cssW * this.GH) / this.GW);
+    const availW = Math.max(2, frame.clientWidth - 3);
+    const availH = Math.max(2, frame.clientHeight - 3);
+    const aspect = this.GW / this.GH;
+    let cssW = availW;
+    let cssH = Math.round(cssW / aspect);
+    if (cssH > availH) {
+      cssH = availH;
+      cssW = Math.round(cssH * aspect);
+    }
     this.dpr = Math.min(devicePixelRatio || 1, 2);
     this.canvas.style.width = cssW + "px";
     this.canvas.style.height = cssH + "px";
