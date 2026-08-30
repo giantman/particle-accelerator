@@ -13,6 +13,7 @@ export function useScatterPress() {
   const [current, setCurrent] = useState(-1);
   const [stats, setStats] = useState("");
   const [glAvailable, setGlAvailable] = useState(true);
+  const [gifExporting, setGifExporting] = useState(false);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -69,18 +70,19 @@ export function useScatterPress() {
   const addPlateFromFile = useCallback((file: File) => {
     if (!file) return;
     if (!file.type || !file.type.startsWith("image/")) {
-      setStats("THAT FILE IS NOT AN IMAGE.");
+      setStats("That file is not an image.");
       return;
     }
-    setStats("PRESSING…");
+    const isVector = file.type === "image/svg+xml" || file.name.toLowerCase().endsWith(".svg");
+    setStats("Pressing…");
     const rd = new FileReader();
     rd.onload = () => {
       const img = new Image();
-      img.onload = () => engineRef.current?.addPlate(img);
-      img.onerror = () => setStats("COULD NOT DECODE THAT IMAGE — TRY JPG / PNG / WEBP.");
+      img.onload = () => engineRef.current?.addPlate(img, isVector);
+      img.onerror = () => setStats("Could not decode that image — try jpg / png / webp.");
       img.src = rd.result as string;
     };
-    rd.onerror = () => setStats("COULD NOT READ THAT FILE.");
+    rd.onerror = () => setStats("Could not read that file.");
     rd.readAsDataURL(file);
   }, []);
 
@@ -94,6 +96,24 @@ export function useScatterPress() {
     a.download = "scatter-press.png";
     a.click();
   }, []);
+
+  const exportGIF = useCallback(async () => {
+    if (!engineRef.current || gifExporting) return;
+    setGifExporting(true);
+    setStats("Rendering GIF…");
+    try {
+      const blob = await engineRef.current.exportGIF();
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scatter-press.gif";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setGifExporting(false);
+    }
+  }, [gifExporting]);
 
   return {
     canvasRef,
@@ -109,6 +129,8 @@ export function useScatterPress() {
     selectPlate,
     stats,
     exportPNG,
+    exportGIF,
+    gifExporting,
     glAvailable,
   };
 }

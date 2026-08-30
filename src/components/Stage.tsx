@@ -26,9 +26,9 @@ export function Stage({ canvasRef, frameRef, stats, glAvailable, onDropFiles }: 
   };
 
   return (
-    <div className="stage">
+    <div className="flex h-screen min-w-0 flex-1 flex-col">
       <div
-        className={"frame" + (dragover ? " dragover" : "")}
+        className="relative flex flex-1 min-h-0 items-center justify-center bg-background"
         ref={frameRef}
         onDragEnter={enter}
         onDragOver={enter}
@@ -38,17 +38,21 @@ export function Stage({ canvasRef, frameRef, stats, glAvailable, onDropFiles }: 
         {glAvailable ? (
           <canvas
             ref={canvasRef}
+            className="block max-w-full touch-none cursor-crosshair"
             aria-label="Halftone particle rendering of the loaded image; dots scatter under the cursor, a click blasts them outward, and they re-form on their own."
           />
         ) : (
-          <p style={{ padding: 24, fontSize: 13 }}>
-            WebGL is unavailable in this browser, so the press cannot run.
-          </p>
+          <p className="p-6 text-[13px]">WebGL is unavailable in this browser, so the press cannot run.</p>
+        )}
+        {dragover && (
+          <div className="pointer-events-none absolute inset-0 grid place-items-center bg-background/82 text-sm text-foreground">
+            Drop to press
+          </div>
         )}
       </div>
-      <div className="plate-mark">
-        <span>{stats}</span>
-        <span>HOVER STIRS &middot; CLICK BLASTS &middot; DIALS RE-TUNE</span>
+      <div className="flex flex-none flex-wrap justify-between gap-3.5 border-t border-border px-[18px] py-2.5 text-xs text-muted-foreground">
+        <span className="tabular-nums text-foreground">{stats}</span>
+        <span>Hover stirs &middot; click blasts &middot; dials re-tune</span>
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import { RangeRow } from "./RangeRow";
+import { CheckboxField } from "./CheckboxField";
 import { fmt, type ScatterParams } from "../engine/params";
 
 interface PhysicsGroupProps {
@@ -8,11 +9,10 @@ interface PhysicsGroupProps {
 
 export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
   return (
-    <div className="group">
-      <h2>PHYSICS</h2>
+    <>
       <RangeRow
         id="radius"
-        label="BLAST RADIUS"
+        label="Blast radius"
         min={0.04}
         max={0.3}
         step={0.01}
@@ -22,7 +22,7 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
       />
       <RangeRow
         id="strength"
-        label="BLAST POWER"
+        label="Blast power"
         min={0}
         max={3}
         step={0.1}
@@ -31,18 +31,28 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
         onChange={(v) => updateParam("strength", v)}
       />
       <RangeRow
-        id="swirl"
-        label="SWIRL"
+        id="falloff"
+        label="Falloff"
         min={0}
         max={1}
         step={0.05}
+        value={params.falloff}
+        format={fmt.falloff}
+        onChange={(v) => updateParam("falloff", v)}
+      />
+      <RangeRow
+        id="swirl"
+        label="Swirl"
+        min={0}
+        max={3}
+        step={0.1}
         value={params.swirl}
         format={fmt.swirl}
         onChange={(v) => updateParam("swirl", v)}
       />
       <RangeRow
         id="spring"
-        label="RETURN SPEED"
+        label="Return speed"
         min={0.2}
         max={3}
         step={0.1}
@@ -50,31 +60,33 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
         format={fmt.spring}
         onChange={(v) => updateParam("spring", v)}
       />
-      <div className="row">
-        <span className="check">
-          <input
-            type="checkbox"
-            id="orbit"
-            checked={params.orbit}
-            onChange={(e) => updateParam("orbit", e.target.checked)}
-          />
-          <label htmlFor="orbit">ORBIT PARTICLES</label>
-        </span>
-      </div>
-      <div className="row">
-        <span className="check">
-          <input
-            type="checkbox"
-            id="attract"
-            checked={params.attract}
-            onChange={(e) => updateParam("attract", e.target.checked)}
-          />
-          <label htmlFor="attract">ATTRACT (MAGNET)</label>
-        </span>
-      </div>
+      <CheckboxField
+        id="orbit"
+        label="Orbit particles"
+        checked={params.orbit}
+        onCheckedChange={(v) => updateParam("orbit", v)}
+      />
+      {params.orbit && (
+        <RangeRow
+          id="orbitStrength"
+          label="Orbit strength"
+          min={0}
+          max={8}
+          step={0.2}
+          value={params.orbitStrength}
+          format={fmt.orbitStrength}
+          onChange={(v) => updateParam("orbitStrength", v)}
+        />
+      )}
+      <CheckboxField
+        id="attract"
+        label="Attract (magnet)"
+        checked={params.attract}
+        onCheckedChange={(v) => updateParam("attract", v)}
+      />
       <RangeRow
         id="turbulence"
-        label="TURBULENCE"
+        label="Turbulence"
         min={0}
         max={1}
         step={0.05}
@@ -84,7 +96,7 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
       />
       <RangeRow
         id="gravity"
-        label="GRAVITY"
+        label="Gravity"
         min={0}
         max={2}
         step={0.1}
@@ -95,7 +107,7 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
       {params.gravity > 0 && (
         <RangeRow
           id="gravityAngle"
-          label="GRAVITY ANGLE"
+          label="Gravity angle"
           min={0}
           max={360}
           step={5}
@@ -106,7 +118,7 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
       )}
       <RangeRow
         id="depthWeight"
-        label="DEPTH WEIGHT"
+        label="Depth weight"
         min={0}
         max={1}
         step={0.05}
@@ -114,6 +126,6 @@ export function PhysicsGroup({ params, updateParam }: PhysicsGroupProps) {
         format={fmt.depthWeight}
         onChange={(v) => updateParam("depthWeight", v)}
       />
-    </div>
+    </>
   );
 }

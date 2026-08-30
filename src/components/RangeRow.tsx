@@ -1,3 +1,6 @@
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+
 interface RangeRowProps {
   id: string;
   label: string;
@@ -11,18 +14,23 @@ interface RangeRowProps {
 
 export function RangeRow({ id, label, min, max, step, value, format, onChange }: RangeRowProps) {
   return (
-    <div className="row">
-      <label htmlFor={id}>{label}</label>
-      <input
-        type="range"
+    <div className="flex items-center gap-2.5">
+      <Label htmlFor={id} className="w-28 shrink-0 text-xs font-normal text-muted-foreground">
+        {label}
+      </Label>
+      <Slider
         id={id}
+        thumbLabel={label}
         min={min}
         max={max}
         step={step}
-        value={value}
-        onChange={(e) => onChange(+e.target.value)}
+        value={[value]}
+        onValueChange={([v]) => onChange(v)}
+        className="flex-1"
       />
-      <output htmlFor={id}>{format(value)}</output>
+      <output htmlFor={id} className="w-11 shrink-0 text-right text-xs tabular-nums text-foreground">
+        {format(value)}
+      </output>
     </div>
   );
 }

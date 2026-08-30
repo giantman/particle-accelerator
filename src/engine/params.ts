@@ -13,10 +13,12 @@ export interface ScatterParams {
   rampColors: string[];
   radius: number;
   strength: number;
+  falloff: number;
   swirl: number;
   spring: number;
   stagger: number;
   orbit: boolean;
+  orbitStrength: number;
   turbulence: number;
   gravity: number;
   gravityAngle: number;
@@ -40,10 +42,12 @@ export const DEFAULTS: ScatterParams = {
   rampColors: ["#1F2CB4", "#3143EB", "#7A86F0"],
   radius: 0.09,
   strength: 1,
+  falloff: 0.5,
   swirl: 0.35,
   spring: 1,
   stagger: 1.1,
   orbit: false,
+  orbitStrength: 1,
   turbulence: 0,
   gravity: 0,
   gravityAngle: 90,
@@ -112,9 +116,11 @@ export const fmt: Record<
   midtone: (v) => v.toFixed(2),
   radius: (v) => Math.round(v * 100) + "%",
   strength: (v) => v.toFixed(1) + "×",
+  falloff: (v) => (v <= 0.05 ? "Soft" : v >= 0.95 ? "Hard" : v.toFixed(2)),
   swirl: (v) => v.toFixed(2),
   spring: (v) => v.toFixed(1) + "×",
   stagger: (v) => v.toFixed(1) + "s",
+  orbitStrength: (v) => v.toFixed(1) + "×",
   turbulence: (v) => v.toFixed(2),
   gravity: (v) => v.toFixed(1),
   gravityAngle: (v) => Math.round(v) + "°",

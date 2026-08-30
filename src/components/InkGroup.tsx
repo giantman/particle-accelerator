@@ -1,3 +1,7 @@
+import { CheckboxField } from "./CheckboxField";
+import { ColorField } from "./ColorField";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { MAX_RAMP_STOPS, MIN_RAMP_STOPS, type ScatterParams } from "../engine/params";
 
 interface InkGroupProps {
@@ -27,71 +31,53 @@ export function InkGroup({ params, updateParam, swapInks }: InkGroupProps) {
   };
 
   return (
-    <div className="group">
-      <h2>INKS</h2>
-
+    <>
       {!params.depthRamp && (
-        <div className="row">
-          <label htmlFor="inkColor">INK</label>
-          <input
-            type="color"
-            id="inkColor"
-            value={params.ink}
-            onChange={(e) => updateParam("ink", e.target.value)}
-          />
-        </div>
+        <ColorField id="inkColor" label="Ink" value={params.ink} onChange={(v) => updateParam("ink", v)} />
       )}
-      <div className="row">
-        <label htmlFor="paperColor">PAPER</label>
-        <input
-          type="color"
-          id="paperColor"
-          value={params.paper}
-          onChange={(e) => updateParam("paper", e.target.value)}
-        />
-      </div>
-      <button className="btn ghost" type="button" onClick={swapInks} disabled={params.depthRamp}>
-        SWAP INKS
-      </button>
+      <ColorField id="paperColor" label="Paper" value={params.paper} onChange={(v) => updateParam("paper", v)} />
+      <Button type="button" variant="outline" className="w-full" onClick={swapInks} disabled={params.depthRamp}>
+        Swap inks
+      </Button>
 
-      <div className="row">
-        <span className="check">
-          <input
-            type="checkbox"
-            id="depthRamp"
-            checked={params.depthRamp}
-            onChange={(e) => updateParam("depthRamp", e.target.checked)}
-          />
-          <label htmlFor="depthRamp">DEPTH RAMP</label>
-        </span>
-      </div>
+      <CheckboxField
+        id="depthRamp"
+        label="Depth ramp"
+        checked={params.depthRamp}
+        onCheckedChange={(v) => updateParam("depthRamp", v)}
+      />
 
       {params.depthRamp && (
         <>
           {stops.map((color, i) => (
-            <div className="row" key={i}>
-              <label>STOP {i + 1}</label>
-              <input type="color" value={color} onChange={(e) => setStop(i, e.target.value)} />
+            <div className="flex items-center justify-between gap-2.5" key={i}>
+              <Label className="w-28 shrink-0 text-xs font-normal text-muted-foreground">Stop {i + 1}</Label>
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setStop(i, e.target.value)}
+                className="h-6 w-[34px] cursor-pointer border border-border bg-transparent p-0"
+              />
               {stops.length > MIN_RAMP_STOPS && (
-                <button
-                  className="btn ghost"
+                <Button
                   type="button"
-                  style={{ width: "auto", flex: "none", padding: "6px 9px" }}
+                  variant="outline"
+                  size="icon-sm"
                   aria-label={`Remove stop ${i + 1}`}
                   onClick={() => removeStop(i)}
                 >
                   ×
-                </button>
+                </Button>
               )}
             </div>
           ))}
           {stops.length < MAX_RAMP_STOPS && (
-            <button className="btn ghost" type="button" onClick={addStop}>
-              ADD COLOR
-            </button>
+            <Button type="button" variant="outline" className="w-full" onClick={addStop}>
+              Add color
+            </Button>
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

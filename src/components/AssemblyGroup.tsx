@@ -1,4 +1,5 @@
 import { RangeRow } from "./RangeRow";
+import { Button } from "@/components/ui/button";
 import { fmt, type ScatterParams } from "../engine/params";
 
 interface AssemblyGroupProps {
@@ -9,11 +10,10 @@ interface AssemblyGroupProps {
 
 export function AssemblyGroup({ params, updateParam, replay }: AssemblyGroupProps) {
   return (
-    <div className="group">
-      <h2>ASSEMBLY</h2>
+    <>
       <RangeRow
         id="stagger"
-        label="BUILD TIME"
+        label="Build time"
         min={0.2}
         max={4}
         step={0.1}
@@ -21,9 +21,9 @@ export function AssemblyGroup({ params, updateParam, replay }: AssemblyGroupProp
         format={fmt.stagger}
         onChange={(v) => updateParam("stagger", v)}
       />
-      <button className="btn" type="button" onClick={replay}>
-        REPLAY ASSEMBLY
-      </button>
-    </div>
+      <Button type="button" className="w-full" onClick={replay}>
+        Replay assembly
+      </Button>
+    </>
   );
 }

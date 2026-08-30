@@ -13,7 +13,7 @@ export interface ScatterPressCallbacks {
 const REBUILD_KEY_SET = new Set<string>(REBUILD_KEYS);
 const MAX_PLATES = 12;
 const ORBIT_SPEED = 1.3; // radians/sec
-const ORBIT_AMPLITUDE = 0.4; // fraction of a grid cell
+const ORBIT_AMPLITUDE = 1.2; // fraction of a grid cell, at orbitStrength 1×
 
 /**
  * Two-color halftone particle engine, ported from scatter_press_test_3.html.
@@ -295,15 +295,20 @@ export class ScatterPressEngine {
   }
 
   // ---------- plates ----------
-  addPlate(img: HTMLImageElement): number {
+  // `isVector` is set for SVG uploads: browsers report a bogus small intrinsic
+  // size (often 300x150, or an aspect-correct-but-tiny size) for SVGs that
+  // only declare a viewBox with no width/height — but <canvas> still
+  // rasterizes them crisply at whatever size we draw them at. So for vector
+  // sources we always target the full working resolution (upscaling that
+  // bogus size is free/lossless); for raster uploads we keep the old
+  // never-upscale behavior since that would just blur a small bitmap.
+  addPlate(img: HTMLImageElement, isVector = false): number {
     if (this.plates.length >= MAX_PLATES) {
-      this.callbacks.onStats?.(`PLATE TRAY FULL · ${MAX_PLATES} MAX.`);
+      this.callbacks.onStats?.(`Plate tray full · ${MAX_PLATES} max.`);
       return this.current;
     }
-    const sc = Math.min(
-      1,
-      2000 / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height)
-    );
+    const maxDim = Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const sc = isVector ? 2000 / maxDim : Math.min(1, 2000 / maxDim);
     const c = document.createElement("canvas");
     c.width = Math.max(2, Math.round((img.naturalWidth || img.width) * sc));
     c.height = Math.max(2, Math.round((img.naturalHeight || img.height) * sc));
@@ -362,29 +367,27 @@ export class ScatterPressEngine {
     return { cov, gw, gh };
   }
 
-  // Histogram-equalize coverage values into a rank/percentile in [0,1] across
-  // the actual dot population, so the depth ramp's colors are spread evenly
-  // across dots regardless of how skewed the source image's tonal range is
-  // (e.g. a mostly-midtone photo would otherwise crowd into one ramp color).
-  private equalize(cov: Float32Array, count: number): Float32Array {
-    const BINS = 256;
-    const hist = new Float32Array(BINS);
-    for (let i = 0; i < count; i++) {
-      const b = Math.min(BINS - 1, Math.max(0, Math.floor(cov[i] * BINS)));
-      hist[b]++;
-    }
-    const cdf = new Float32Array(BINS);
-    let acc = 0;
-    for (let b = 0; b < BINS; b++) {
-      acc += hist[b];
-      cdf[b] = acc;
-    }
-    const total = Math.max(1, count);
+  // Rank-equalize coverage values into a percentile in [0,1] across the
+  // actual dot population, so the depth ramp's colors are spread evenly
+  // regardless of how skewed the source image's tonal range is (e.g. a
+  // mostly-midtone photo would otherwise crowd into one ramp color).
+  //
+  // This ranks every particle individually rather than bucketing into a
+  // fixed number of histogram bins: a binned approach maps every particle
+  // that lands in the same bin to one shared output value, so a large flat
+  // region (a bold logo's solid interior, a thresholded photo) — where
+  // thousands of particles share the exact same coverage — collapses onto a
+  // single ramp color no matter how many bins you use. Ranking instead gives
+  // each particle a distinct percentile; ties are broken by each particle's
+  // existing random seed, so a flat region spreads into a dithered mix
+  // across its share of the ramp instead of one flat block.
+  private equalize(cov: Float32Array, tieBreak: Float32Array, count: number): Float32Array {
+    const order = new Array<number>(count);
+    for (let i = 0; i < count; i++) order[i] = i;
+    order.sort((a, b) => cov[a] - cov[b] || tieBreak[a * 2] - tieBreak[b * 2]);
     const out = new Float32Array(count);
-    for (let i = 0; i < count; i++) {
-      const b = Math.min(BINS - 1, Math.max(0, Math.floor(cov[i] * BINS)));
-      out[i] = cdf[b] / total;
-    }
+    const denom = Math.max(1, count - 1);
+    for (let rank = 0; rank < count; rank++) out[order[rank]] = rank / denom;
     return out;
   }
 
@@ -436,7 +439,7 @@ export class ScatterPressEngine {
     this.home = new Float32Array(count * 2);
     this.pos = new Float32Array(count * 2);
     this.vel = new Float32Array(count * 2);
-    const rampT = this.equalize(this.covArr, count);
+    const rampT = this.equalize(this.covArr, this.randF, count);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufCov);
     gl.bufferData(gl.ARRAY_BUFFER, this.covArr, gl.STATIC_DRAW);
     gl.vertexAttribPointer(this.locCov, 1, gl.FLOAT, false, 0, 0);
@@ -464,8 +467,8 @@ export class ScatterPressEngine {
         this.vel[i * 2 + 1] = (this.randF[i * 2 + 1] - 0.5) * 2;
       }
     }
-    const plateSuffix = this.plates.length > 1 ? ` · PLATE ${this.current + 1}/${this.plates.length}` : "";
-    this.callbacks.onStats?.(`${count.toLocaleString()} DOTS · ${gw} × ${gh} CELLS${plateSuffix}`);
+    const plateSuffix = this.plates.length > 1 ? ` · plate ${this.current + 1}/${this.plates.length}` : "";
+    this.callbacks.onStats?.(`${count.toLocaleString()} dots · ${gw} × ${gh} cells${plateSuffix}`);
     this.wake();
   }
 
@@ -523,18 +526,31 @@ export class ScatterPressEngine {
     }
   }
 
+  // Reshapes the normalized 0..1 distance-from-center falloff used by both
+  // the hover push and the click burst. Low falloff (soft cushion) raises the
+  // exponent so force stays concentrated near the pointer and fades early;
+  // high falloff (hard edge) lowers it so force holds near-full strength
+  // across the radius and only cuts off sharply right at the boundary.
+  private falloffExp(): number {
+    const SOFT_K = 3.5,
+      HARD_K = 0.35;
+    return SOFT_K + (HARD_K - SOFT_K) * this.params.falloff;
+  }
+
   private burst(bx: number, by: number) {
     if (this.reduced || !this.count) return;
     const p = this.params;
     const L = Math.max(80, this.W * p.radius * 2.2);
     const A = 16 * p.strength * (this.W / 640);
+    const k = this.falloffExp();
     for (let i = 0; i < this.count; i++) {
       const ix = i * 2,
         iy = ix + 1;
       const dx = this.pos[ix] - bx,
         dy = this.pos[iy] - by;
       const d = Math.sqrt(dx * dx + dy * dy) + 6;
-      const m = A * Math.exp(-d / L);
+      const f = Math.max(0, 1 - d / L);
+      const m = A * Math.pow(f, k);
       this.vel[ix] += (dx / d) * m + (this.randF[ix] - 0.5) * m * 0.4;
       this.vel[iy] += (dy / d) * m + (this.randF[iy] - 0.5) * m * 0.4;
     }
@@ -561,6 +577,7 @@ export class ScatterPressEngine {
     const gAccel = p.gravity * (this.W / 640) * 0.05;
     const gAx = Math.cos(gRad) * gAccel;
     const gAy = Math.sin(gRad) * gAccel;
+    const falloffK = this.falloffExp();
     let energy = 0;
     for (let i = 0; i < this.count; i++) {
       const ix = i * 2,
@@ -585,7 +602,7 @@ export class ScatterPressEngine {
       let hy = this.home[iy];
       if (orbitOn) {
         const angle = this.randF[ix] * Math.PI * 2 + t * ORBIT_SPEED;
-        const amp = this.cell * ORBIT_AMPLITUDE;
+        const amp = this.cell * ORBIT_AMPLITUDE * p.orbitStrength;
         hx += Math.cos(angle) * amp;
         hy += Math.sin(angle) * amp;
       }
@@ -610,11 +627,14 @@ export class ScatterPressEngine {
           d2 = dx * dx + dy * dy;
         if (d2 < R2) {
           const d = Math.sqrt(d2) + 4;
-          const f = 1 - d / R;
-          const s = (kick * f * f * attractDir * wgt) / d;
-          const sw = p.swirl;
-          vx += dx * s - dy * s * sw * (this.randF[ix] - 0.5) * 2.0;
-          vy += dy * s + dx * s * sw * (this.randF[iy] - 0.5) * 2.0;
+          const f = Math.max(0, 1 - d / R);
+          const s = (kick * Math.pow(f, falloffK) * attractDir * wgt) / d;
+          // Coherent tangential spin around the pointer (same rotational
+          // direction for every particle, unlike a per-particle random
+          // jitter) so high swirl reads as a real vortex, not extra noise.
+          const spin = s * p.swirl * 2.6 * (0.85 + 0.3 * this.randF[ix]);
+          vx += dx * s - dy * spin;
+          vy += dy * s + dx * spin;
         }
       }
       this.vel[ix] = vx;
@@ -706,6 +726,66 @@ export class ScatterPressEngine {
     // reflects current params even if the sim has gone idle.
     this.draw();
     return this.canvas.toDataURL("image/png");
+  }
+
+  private gifBusy = false;
+
+  // Captures a short looping clip of whatever motion is currently playing
+  // (hover drift, orbit, turbulence, a burst in progress...) as an animated
+  // GIF. Drives the sim's own step/draw loop manually at a fixed cadence
+  // instead of sampling the ambient rAF loop, so the clip's playback speed
+  // is deterministic regardless of how long encoding each frame takes.
+  async exportGIF(): Promise<Blob | null> {
+    if (!this.gl || this.gifBusy) return null;
+    this.gifBusy = true;
+    try {
+      const { GIFEncoder, quantize, applyPalette } = await import("gifenc");
+
+      // Pause the ambient render loop for the duration of the capture so we
+      // don't double-step the physics.
+      if (this.raf) {
+        cancelAnimationFrame(this.raf);
+        this.raf = 0;
+      }
+
+      const FPS = 12;
+      const DURATION_MS = 1800;
+      const FRAME_DELAY = Math.round(1000 / FPS);
+      const TOTAL_FRAMES = Math.round(DURATION_MS / FRAME_DELAY);
+      const MAX_DIM = 480;
+
+      const srcW = this.canvas.width,
+        srcH = this.canvas.height;
+      const scale = Math.min(1, MAX_DIM / Math.max(srcW, srcH));
+      const outW = Math.max(2, Math.round(srcW * scale));
+      const outH = Math.max(2, Math.round(srcH * scale));
+
+      const sample = document.createElement("canvas");
+      sample.width = outW;
+      sample.height = outH;
+      const sctx = sample.getContext("2d", { willReadFrequently: true })!;
+
+      const gif = GIFEncoder();
+      let now = performance.now();
+      for (let i = 0; i < TOTAL_FRAMES; i++) {
+        now += FRAME_DELAY;
+        this.step(now);
+        this.draw();
+        sctx.drawImage(this.canvas, 0, 0, outW, outH);
+        const { data } = sctx.getImageData(0, 0, outW, outH);
+        const palette = quantize(data, 256);
+        const index = applyPalette(data, palette);
+        gif.writeFrame(index, outW, outH, { palette, delay: FRAME_DELAY, repeat: 0 });
+        // Yield to the browser between frames so a long capture doesn't
+        // freeze the tab.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+      gif.finish();
+      return new Blob([new Uint8Array(gif.bytes())], { type: "image/gif" });
+    } finally {
+      this.gifBusy = false;
+      this.wake();
+    }
   }
 
   dispose() {
