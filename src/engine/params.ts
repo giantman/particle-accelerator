@@ -34,11 +34,27 @@ export interface ScatterParams {
   depthWeight: number;
   mark: MarkStyle;
   charset: string;
+  asciiSize: number;
   maskEnabled: boolean;
   mask: MaskShape;
   loopEnabled: boolean;
   loopInterval: number;
   loopMode: LoopMode;
+  windEnabled: boolean;
+  windStrength: number;
+  windSpeed: number;
+  windAngle: number;
+  magnetEnabled: boolean;
+  magnetStrength: number;
+  magnetRadius: number;
+  magnetAttract: boolean;
+  rippleEnabled: boolean;
+  rippleStrength: number;
+  rippleSpeed: number;
+  wellsEnabled: boolean;
+  wellStrength: number;
+  wellRadius: number;
+  wellAttract: boolean;
 }
 
 export const DEFAULTS: ScatterParams = {
@@ -72,11 +88,27 @@ export const DEFAULTS: ScatterParams = {
   depthWeight: 0,
   mark: "dot",
   charset: ".:-=+*#%@",
+  asciiSize: 1,
   maskEnabled: false,
   mask: "circle",
   loopEnabled: false,
   loopInterval: 3,
   loopMode: "forward",
+  windEnabled: false,
+  windStrength: 1,
+  windSpeed: 1,
+  windAngle: 0,
+  magnetEnabled: false,
+  magnetStrength: 1.5,
+  magnetRadius: 0.14,
+  magnetAttract: true,
+  rippleEnabled: false,
+  rippleStrength: 1.2,
+  rippleSpeed: 1,
+  wellsEnabled: false,
+  wellStrength: 1.5,
+  wellRadius: 0.22,
+  wellAttract: true,
 };
 
 export const MIN_RAMP_STOPS = 2;
@@ -164,11 +196,18 @@ export const fmt: Record<
     | "rampColors"
     | "loopEnabled"
     | "loopMode"
+    | "windEnabled"
+    | "magnetEnabled"
+    | "magnetAttract"
+    | "rippleEnabled"
+    | "wellsEnabled"
+    | "wellAttract"
   >,
   (v: number) => string
 > = {
   density: (v) => String(v),
   dotScale: (v) => v.toFixed(2) + "×",
+  asciiSize: (v) => v.toFixed(2) + "×",
   contrast: (v) => v.toFixed(2),
   midtone: (v) => v.toFixed(2),
   radius: (v) => Math.round(v * 100) + "%",
@@ -187,4 +226,13 @@ export const fmt: Record<
   gravityAngle: (v) => Math.round(v) + "°",
   depthWeight: (v) => v.toFixed(2),
   loopInterval: (v) => v.toFixed(1) + "s",
+  windStrength: (v) => v.toFixed(1) + "×",
+  windSpeed: (v) => v.toFixed(1) + "×",
+  windAngle: (v) => Math.round(v) + "°",
+  magnetStrength: (v) => v.toFixed(1) + "×",
+  magnetRadius: (v) => Math.round(v * 100) + "%",
+  rippleStrength: (v) => v.toFixed(1) + "×",
+  rippleSpeed: (v) => v.toFixed(1) + "×",
+  wellStrength: (v) => v.toFixed(1) + "×",
+  wellRadius: (v) => Math.round(v * 100) + "%",
 };

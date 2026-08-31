@@ -150,16 +150,29 @@ export function PlateGroup({
         format={fmt.density}
         onChange={(v) => updateParam("density", v)}
       />
-      <RangeRow
-        id="dotScale"
-        label="Dot size"
-        min={0.6}
-        max={3}
-        step={0.05}
-        value={params.dotScale}
-        format={fmt.dotScale}
-        onChange={(v) => updateParam("dotScale", v)}
-      />
+      {params.mark === "ascii" ? (
+        <RangeRow
+          id="asciiSize"
+          label="Font size"
+          min={0.6}
+          max={10}
+          step={0.1}
+          value={params.asciiSize}
+          format={fmt.asciiSize}
+          onChange={(v) => updateParam("asciiSize", v)}
+        />
+      ) : (
+        <RangeRow
+          id="dotScale"
+          label="Dot size"
+          min={0.6}
+          max={3}
+          step={0.05}
+          value={params.dotScale}
+          format={fmt.dotScale}
+          onChange={(v) => updateParam("dotScale", v)}
+        />
+      )}
       <RangeRow
         id="contrast"
         label="Contrast"

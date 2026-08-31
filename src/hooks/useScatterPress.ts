@@ -19,6 +19,7 @@ export function useScatterPress() {
   const [glAvailable, setGlAvailable] = useState(true);
   const [gifExporting, setGifExporting] = useState(false);
   const [svgExporting, setSvgExporting] = useState(false);
+  const [wellCount, setWellCount] = useState(0);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -29,6 +30,7 @@ export function useScatterPress() {
         setCurrent(i);
         if (persistPlatesRef.current) savePlates(sources, i);
       },
+      onWells: setWellCount,
     });
     engineRef.current = engine;
     setGlAvailable(engine.available);
@@ -116,6 +118,7 @@ export function useScatterPress() {
   const selectPlate = useCallback((i: number) => engineRef.current?.selectPlate(i), []);
   const removePlate = useCallback((i: number) => engineRef.current?.removePlate(i), []);
   const movePlate = useCallback((from: number, to: number) => engineRef.current?.movePlate(from, to), []);
+  const clearWells = useCallback(() => engineRef.current?.clearWells(), []);
 
   // Auto-advance through plates on a timer. Reads `current`/plate count via
   // refs (kept fresh below) rather than closing over them directly, so the
@@ -227,6 +230,8 @@ export function useScatterPress() {
     selectPlate,
     removePlate,
     movePlate,
+    wellCount,
+    clearWells,
     stats,
     exportPNG,
     exportGIF,

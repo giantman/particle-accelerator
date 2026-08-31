@@ -6,6 +6,7 @@ import { InkGroup } from "./components/InkGroup";
 import { PhysicsGroup } from "./components/PhysicsGroup";
 import { AssemblyGroup } from "./components/AssemblyGroup";
 import { LoopGroup } from "./components/LoopGroup";
+import { FieldGroup } from "./components/FieldGroup";
 import { ExportMenu } from "./components/ExportMenu";
 import { Stage } from "./components/Stage";
 import { AccordionSection } from "./components/AccordionSection";
@@ -13,7 +14,7 @@ import { Accordion } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = ["plate", "inks", "physics", "assembly", "loop"];
+const SECTIONS = ["plate", "inks", "physics", "field", "assembly", "loop"];
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -31,6 +32,8 @@ export default function App() {
     selectPlate,
     removePlate,
     movePlate,
+    wellCount,
+    clearWells,
     stats,
     exportPNG,
     exportGIF,
@@ -87,6 +90,9 @@ export default function App() {
           </AccordionSection>
           <AccordionSection value="physics" title="Physics">
             <PhysicsGroup params={params} updateParam={updateParam} />
+          </AccordionSection>
+          <AccordionSection value="field" title="Field">
+            <FieldGroup params={params} updateParam={updateParam} wellCount={wellCount} onClearWells={clearWells} />
           </AccordionSection>
           <AccordionSection value="assembly" title="Assembly">
             <AssemblyGroup params={params} updateParam={updateParam} replay={replay} />

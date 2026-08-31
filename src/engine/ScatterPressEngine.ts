@@ -12,11 +12,14 @@ export interface Plate {
 export interface ScatterPressCallbacks {
   onStats?: (text: string) => void;
   onPlates?: (thumbs: string[], current: number, sources: string[]) => void;
+  onWells?: (count: number) => void;
 }
 
 const REBUILD_KEY_SET = new Set<string>(REBUILD_KEYS);
 const MAX_PLATES = 12;
 const ORBIT_AMPLITUDE = 1.2; // fraction of a grid cell, at orbitStrength 1×
+const RIPPLE_MAX_AGE = 2200; // ms a click ripple stays alive before fully decaying
+const MAX_WELLS = 3;
 
 /**
  * Two-color halftone particle engine, ported from scatter_press_test_3.html.
@@ -44,6 +47,7 @@ export class ScatterPressEngine {
   private uCell!: WebGLUniformLocation | null;
   private uDpr!: WebGLUniformLocation | null;
   private uScale!: WebGLUniformLocation | null;
+  private uCharScale!: WebGLUniformLocation | null;
   private uInk!: WebGLUniformLocation | null;
   private uMode!: WebGLUniformLocation | null;
   private uGlyphN!: WebGLUniformLocation | null;
@@ -85,6 +89,8 @@ export class ScatterPressEngine {
   private mx = -1e4;
   private my = -1e4;
   private mAct = false;
+  private ripples: { x: number; y: number; t0: number }[] = [];
+  private wells: { x: number; y: number }[] = [];
 
   private rebuildTimer = 0;
   private atlasTimer = 0;
@@ -107,6 +113,8 @@ export class ScatterPressEngine {
   private onPointerDown = (e: PointerEvent) => {
     this.mAct = true;
     this.toLocal(e);
+    if (this.params.wellsEnabled) this.addWell(this.mx, this.my);
+    if (this.params.rippleEnabled) this.addRipple(this.mx, this.my);
     this.burst(this.mx, this.my);
   };
   private loopBound = (now: number) => this.frameLoop(now);
@@ -158,14 +166,14 @@ export class ScatterPressEngine {
     const gl = this.gl!;
     const vsrc = `
       attribute vec2 aPos; attribute float aCov; attribute vec2 aRand; attribute float aRampT;
-      uniform vec2 uSize; uniform float uCell, uDpr, uScale, uMode;
+      uniform vec2 uSize; uniform float uCell, uDpr, uScale, uCharScale, uMode;
       varying float vCov;
       varying float vRampT;
       void main() {
         vec2 clip = vec2(aPos.x / uSize.x * 2.0 - 1.0, 1.0 - aPos.y / uSize.y * 2.0);
         gl_Position = vec4(clip, 0.0, 1.0);
         float dDot = uCell * uScale * (1.2 * sqrt(aCov) + 0.5 * aCov * aCov) * (0.94 + 0.12 * aRand.x);
-        float dChar = uCell * uScale * 1.45;
+        float dChar = uCell * uCharScale * 1.45;
         float d = mix(dDot, dChar, uMode);
         gl_PointSize = max(d * uDpr, 1.15);
         vCov = aCov;
@@ -213,6 +221,7 @@ export class ScatterPressEngine {
     this.uCell = gl.getUniformLocation(prog, "uCell");
     this.uDpr = gl.getUniformLocation(prog, "uDpr");
     this.uScale = gl.getUniformLocation(prog, "uScale");
+    this.uCharScale = gl.getUniformLocation(prog, "uCharScale");
     this.uInk = gl.getUniformLocation(prog, "uInk");
     this.uMode = gl.getUniformLocation(prog, "uMode");
     this.uGlyphN = gl.getUniformLocation(prog, "uGlyphN");
@@ -573,6 +582,12 @@ export class ScatterPressEngine {
         this.pos[i * 2 + 1] *= sx;
       }
     }
+    if (sx && this.wells.length) {
+      for (const w of this.wells) {
+        w.x *= sx;
+        w.y *= sx;
+      }
+    }
     this.wake();
   }
 
@@ -601,6 +616,34 @@ export class ScatterPressEngine {
     const SOFT_K = 3.5,
       HARD_K = 0.35;
     return SOFT_K + (HARD_K - SOFT_K) * this.params.falloff;
+  }
+
+  // A short-lived traveling wave, triggered by a click when ripples are
+  // enabled. Stored as origin + start time and expanded/decayed by age each
+  // frame in step() — capped at a handful concurrent so rapid clicking
+  // doesn't pile up unbounded work.
+  private addRipple(x: number, y: number) {
+    if (this.reduced) return;
+    this.ripples.push({ x, y, t0: performance.now() });
+    if (this.ripples.length > 4) this.ripples.shift();
+    this.wake();
+  }
+
+  // Persistent point attractors/repellers the user places by clicking while
+  // "Gravity wells" is enabled — unlike the click burst these keep pulling
+  // every frame until cleared. Capped at MAX_WELLS, oldest evicted first.
+  addWell(x: number, y: number) {
+    this.wells.push({ x, y });
+    if (this.wells.length > MAX_WELLS) this.wells.shift();
+    this.callbacks.onWells?.(this.wells.length);
+    this.wake();
+  }
+
+  clearWells() {
+    if (!this.wells.length) return;
+    this.wells = [];
+    this.callbacks.onWells?.(0);
+    this.wake();
   }
 
   private burst(bx: number, by: number) {
@@ -644,6 +687,34 @@ export class ScatterPressEngine {
     const gAx = Math.cos(gRad) * gAccel;
     const gAy = Math.sin(gRad) * gAccel;
     const falloffK = this.falloffExp();
+
+    // Coherent wind: a spatially-varying (but smoothly time-evolving) noise
+    // field layered on top of a base direction, so particles drift in loose
+    // streams along uWindAngle rather than the per-particle independent
+    // wobble that turbulence produces.
+    const windOn = p.windEnabled && p.windStrength > 0 && !this.reduced;
+    const windRad = (p.windAngle * Math.PI) / 180;
+    const windAmp = this.cell * 2.2 * p.windStrength;
+    const windT = t * p.windSpeed;
+
+    // Continuous cursor pull/push, independent of the click-triggered blast
+    // — same falloff shape and force formula as the blast hover kick, but
+    // its own strength/radius/direction so it can run with blast off.
+    const magnetOn = p.magnetEnabled && !this.reduced;
+    const magnetR = Math.max(40, this.W * p.magnetRadius),
+      magnetR2 = magnetR * magnetR;
+    const magnetKick = magnetOn ? this.W * 0.006 * p.magnetStrength : 0;
+    const magnetDir = p.magnetAttract ? -1 : 1;
+
+    if (this.ripples.length) this.ripples = this.ripples.filter((r) => now - r.t0 < RIPPLE_MAX_AGE);
+    const rippleOn = this.ripples.length > 0 && !this.reduced;
+
+    const wellsOn = p.wellsEnabled && this.wells.length > 0 && !this.reduced;
+    const wellR = Math.max(40, this.W * p.wellRadius),
+      wellR2 = wellR * wellR;
+    const wellDir = p.wellAttract ? -1 : 1;
+    const wellForce = p.wellStrength * (this.W / 640) * 0.03;
+
     let energy = 0;
     for (let i = 0; i < this.count; i++) {
       const ix = i * 2,
@@ -708,17 +779,65 @@ export class ScatterPressEngine {
         hx += (Math.sin(t * 0.7 + ph) + Math.sin(t * 1.9 + ph * 1.7)) * 0.5 * turbAmp;
         hy += (Math.cos(t * 0.8 + ph2) + Math.sin(t * 2.3 + ph2 * 1.3)) * 0.5 * turbAmp;
       }
+      if (windOn) {
+        // homeU (each particle's fixed normalized grid position) drives the
+        // spatial part of the field, so nearby particles pick up correlated
+        // deviation and read as a stream rather than independent noise.
+        const nx = this.homeU[ix] * 3.0,
+          ny = this.homeU[iy] * 3.0;
+        const n =
+          Math.sin(nx * 2.0 + windT * 0.5) +
+          Math.sin(ny * 1.7 - windT * 0.35) +
+          Math.sin((nx + ny) * 1.3 + windT * 0.25);
+        const angle = windRad + n * 0.5;
+        hx += Math.cos(angle) * windAmp;
+        hy += Math.sin(angle) * windAmp;
+      }
+      if (rippleOn) {
+        for (let ri = 0; ri < this.ripples.length; ri++) {
+          const r = this.ripples[ri];
+          const age = now - r.t0;
+          const front = age * 0.001 * p.rippleSpeed * this.W * 0.6;
+          const dx = px - r.x,
+            dy = py - r.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) + 0.001;
+          const band = this.cell * 5;
+          const diff = dist - front;
+          if (diff > -band && diff < band) {
+            const shape = Math.cos((diff / band) * (Math.PI / 2));
+            const decay = 1 - age / RIPPLE_MAX_AGE;
+            const amp = this.cell * 1.8 * p.rippleStrength * shape * decay;
+            hx += (dx / dist) * amp;
+            hy += (dy / dist) * amp;
+          }
+        }
+      }
       let vx = (this.vel[ix] + (hx - px) * (K * (0.7 + 0.6 * this.randF[ix]) * wgt)) * DAMP;
       let vy = (this.vel[iy] + (hy - py) * (K * (0.7 + 0.6 * this.randF[iy]) * wgt)) * DAMP;
       if (gravOn) {
         vx += gAx * wgt;
         vy += gAy * wgt;
       }
-      if (this.mAct && kick) {
+      if (wellsOn) {
+        for (let wi = 0; wi < this.wells.length; wi++) {
+          const w = this.wells[wi];
+          const dx = px - w.x,
+            dy = py - w.y,
+            d2 = dx * dx + dy * dy;
+          if (d2 < wellR2) {
+            const d = Math.sqrt(d2) + 6;
+            const f = Math.max(0, 1 - d / wellR);
+            const m = (wellForce * Math.pow(f, falloffK) * wellDir * wgt) / d;
+            vx += dx * m;
+            vy += dy * m;
+          }
+        }
+      }
+      if (this.mAct && (kick || magnetKick)) {
         const dx = px - this.mx,
           dy = py - this.my,
           d2 = dx * dx + dy * dy;
-        if (d2 < R2) {
+        if (kick && d2 < R2) {
           const d = Math.sqrt(d2) + 4;
           const f = Math.max(0, 1 - d / R);
           const s = (kick * Math.pow(f, falloffK) * attractDir * wgt) / d;
@@ -728,6 +847,13 @@ export class ScatterPressEngine {
           const spin = s * p.swirl * 2.6 * (0.85 + 0.3 * this.randF[ix]);
           vx += dx * s - dy * spin;
           vy += dy * s + dx * spin;
+        }
+        if (magnetKick && d2 < magnetR2) {
+          const d = Math.sqrt(d2) + 4;
+          const f = Math.max(0, 1 - d / magnetR);
+          const m = (magnetKick * Math.pow(f, falloffK) * magnetDir * wgt) / d;
+          vx += dx * m;
+          vy += dy * m;
         }
       }
       this.vel[ix] = vx;
@@ -752,6 +878,7 @@ export class ScatterPressEngine {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform3fv(this.uInk, ink);
     gl.uniform1f(this.uScale, p.dotScale);
+    gl.uniform1f(this.uCharScale, p.asciiSize);
     gl.uniform1f(this.uMode, p.mark === "ascii" ? 1 : 0);
     gl.uniform1f(this.uGlyphN, this.glyphN);
     gl.uniform1f(this.uUseRamp, p.depthRamp ? 1 : 0);
@@ -765,7 +892,13 @@ export class ScatterPressEngine {
     const e = this.step(now);
     this.draw();
     const introDone = now - this.t0 > this.params.stagger * 1000 + 2500;
-    const restless = (this.params.orbit || this.params.turbulence > 0) && !this.reduced;
+    const restless =
+      (this.params.orbit ||
+        this.params.turbulence > 0 ||
+        this.params.windEnabled ||
+        (this.params.wellsEnabled && this.wells.length > 0) ||
+        this.ripples.length > 0) &&
+      !this.reduced;
     this.still = !restless && e < 0.0004 && !this.mAct && introDone ? this.still + 1 : 0;
     if (this.still > 45) {
       this.raf = 0;
